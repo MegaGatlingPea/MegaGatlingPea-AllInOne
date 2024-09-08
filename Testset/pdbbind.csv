@@ -1,4 +1,4 @@
-pdb_id,uniprot_id,protein_name,ligand_name,release_year,resolution,-logkd_ki,kd_ki,reference
+pdb_id,uniprot_id,protein_name,ligand_name,release_year,resolution,kd_value,kd_ki,reference
 1a30,P04585,HIV-1 PROTEASE,3-mer,1998,2.00,4.3,Ki=50uM,1a30.pdf
 1a69,P0ABP8,PURINE NUCLEOSIDE PHOSPHORYLASE,FMB,1998,2.10,5.3,Ki=5uM,1a69.pdf
 1a99,P31133,PUTRESCINE-BINDING PROTEIN,PUT,1998,2.20,5.7,Kd=2uM,1a99.pdf

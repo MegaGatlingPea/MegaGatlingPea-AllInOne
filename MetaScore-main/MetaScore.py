@@ -1,9 +1,9 @@
 import torch
 from torch import nn
 
-from GAT import GAT
-from MPNN import MPNN
-from Interaction import InteractionModule
+from ProteinEncoder.GAT import GAT
+from MoleculeEncoder.MPNN import MPNN
+from InteractionBlock.Interaction import InteractionModule
 from predict import KdPredictionModule
 
 class MetaScore(nn.Module):

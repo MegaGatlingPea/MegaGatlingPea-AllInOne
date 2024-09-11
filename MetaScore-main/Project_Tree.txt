@@ -1,0 +1,15 @@
+MetaScore-main/
+    ├── Dataset/
+    │   ├── Dataloader.py
+    │   ├── ligand2graph.py
+    │   ├── protein2graph.py
+    │   └── preprocess.py
+    ├── InteractionBlock/
+    │   ├── Interaction.py
+    ├── MoleculeEncoder/
+    │   ├── MPNN.py
+    ├── ProteinEncoder/
+    │   ├── GAT.py
+    ├── Project_Tree.txt
+    ├── MetaScore.py
+    └── train.py

@@ -5,8 +5,8 @@ from torch.utils.data import DataLoader
 import wandb
 from tqdm import tqdm
 
-from model import MetaScore
-from dataloader import create_data_loaders
+from MetaScore import MetaScore
+from Dataset.Dataloader import create_data_loaders
 
 # Initialize wandb
 wandb.init(project="MetaScore", name="experiment_1")
@@ -15,7 +15,7 @@ wandb.init(project="MetaScore", name="experiment_1")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Hyperparameters
-BATCH_SIZE = 32
+BATCH_SIZE = 4
 LEARNING_RATE = 1e-3
 NUM_EPOCHS = 300
 PATIENCE = 20  # Early stopping patience

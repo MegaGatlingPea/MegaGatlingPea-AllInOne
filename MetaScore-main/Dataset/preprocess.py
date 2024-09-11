@@ -7,7 +7,7 @@ import torch
 from torch_geometric.data import Data
 import shutil
 
-from protein2graph import protein2graph
+from pocket2graph import pocket2graph
 from ligand2graph import ligand2graph
 
 def pdbbind2lmdb(pdbbind_dir, csv_file, output_lmdb, mode='update', map_size=1099511627776):
@@ -54,7 +54,7 @@ def pdbbind2lmdb(pdbbind_dir, csv_file, output_lmdb, mode='update', map_size=109
             try:
                 # Process protein
                 protein_file = os.path.join(pdb_dir, f"{pdb_id}_protein.pdb")
-                protein_data = protein2graph(protein_file) if os.path.exists(protein_file) else None
+                protein_data = pocket2graph(protein_file) if os.path.exists(protein_file) else None
 
                 # Process ligand
                 ligand_file = os.path.join(pdb_dir, f"{pdb_id}_ligand.sdf")

@@ -38,7 +38,7 @@ def adj2edge_index(adj):
     # Convert adjacency matrix to edge index format
     return adj.nonzero().t().contiguous()
 
-def protein2graph(pdb_path):
+def pocket2graph(pdb_path):
     # Extract pdb_id from pdb_path
     pdb_id = pdb_path.split("/")[-1].split("_")[0]
     

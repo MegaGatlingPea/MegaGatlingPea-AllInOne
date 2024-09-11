@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from ProteinEncoder.GAT import GAT
+from PocketEncoder.GAT import GAT
 from MoleculeEncoder.MPNN import MPNN
 from InteractionBlock.Interaction import InteractionModule
 from predict import KdPredictionModule

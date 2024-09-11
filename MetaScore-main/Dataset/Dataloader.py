@@ -57,7 +57,7 @@ class PDBBindDataset(Dataset):
     def __del__(self):
         """Close the LMDB environment when the object is deleted."""
         self.env.close()
-
+        
 def create_data_loaders(lmdb_path, batch_size, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, seed=42):
     """
     Create DataLoaders for train, validation, and test sets.

@@ -1,0 +1,20 @@
+data:
+  lmdb_path: "./../../Testset/pdbbind.lmdb"
+  batch_size: 4
+
+model:
+  protein_input_dim: 23
+  ligand_input_dim: 41
+  protein_hidden_dim: 128
+  ligand_hidden_dim: 128
+  interaction_dim: 256
+  ligand_edge_dim: 11
+
+training:
+  learning_rate: 1e-3
+  num_epochs: 100
+  patience: 10
+
+wandb:
+  project: "MetaScore"
+  name: "test_1"

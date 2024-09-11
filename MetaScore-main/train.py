@@ -5,55 +5,12 @@ from torch.utils.data import DataLoader
 import wandb
 from tqdm import tqdm
 
+from utils.config import load_config
 from MetaScore import MetaScore
 from Dataset.Dataloader import create_data_loaders
 
-# Initialize wandb
-wandb.init(project="MetaScore", name="experiment_1")
-
-# Set device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Hyperparameters
-BATCH_SIZE = 4
-LEARNING_RATE = 1e-3
-NUM_EPOCHS = 300
-PATIENCE = 20  # Early stopping patience
-LMDB_PATH = "./../Testset/pdbbind.lmdb"
-
-# Create data loaders
-train_loader, val_loader, test_loader = create_data_loaders(LMDB_PATH, BATCH_SIZE)
-
-# Initialize model
-model = MetaScore(
-    protein_input_dim=23,  # Adjust according to your actual input dimensions
-    ligand_input_dim=41,   
-    protein_hidden_dim=128,
-    ligand_hidden_dim=128,
-    interaction_dim=256,
-    ligand_edge_dim=11     
-).to(device)
-
-# Loss function and optimizer
-criterion = nn.SmoothL1Loss()
-optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
-
-# Training function
 def train_epoch(model, loader, optimizer, criterion, device):
-    """
-    Train the model for one epoch.
-
-    Args:
-        model (nn.Module): The model to train
-        loader (DataLoader): Training data loader
-        optimizer (Optimizer): The optimizer
-        criterion (nn.Module): The loss function
-        device (torch.device): The device to use for computation
-
-    Returns:
-        float: Average loss for the epoch
-    """
+    """to train an epoch"""
     model.train()
     total_loss = 0
     for protein_batch, ligand_batch, kd_values, _ in tqdm(loader, desc="Training"):
@@ -71,20 +28,8 @@ def train_epoch(model, loader, optimizer, criterion, device):
     
     return total_loss / len(loader)
 
-# Validation function
 def validate(model, loader, criterion, device):
-    """
-    Validate the model.
-
-    Args:
-        model (nn.Module): The model to validate
-        loader (DataLoader): Validation data loader
-        criterion (nn.Module): The loss function
-        device (torch.device): The device to use for computation
-
-    Returns:
-        float: Average loss for the validation set
-    """
+    """to validate the model"""
     model.eval()
     total_loss = 0
     with torch.no_grad():
@@ -99,43 +44,73 @@ def validate(model, loader, criterion, device):
     
     return total_loss / len(loader)
 
-# Training loop
-best_val_loss = float('inf')
-patience_counter = 0
+def main():
+    config = load_config('config.yaml')
 
-for epoch in range(NUM_EPOCHS):
-    train_loss = train_epoch(model, train_loader, optimizer, criterion, device)
-    val_loss = validate(model, val_loader, criterion, device)
-    
-    scheduler.step(val_loss)
-    
-    wandb.log({
-        "epoch": epoch,
-        "train_loss": train_loss,
-        "val_loss": val_loss,
-        "learning_rate": optimizer.param_groups[0]['lr']
-    })
-    
-    print(f"Epoch {epoch+1}/{NUM_EPOCHS}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-    
-    # Save best model
-    if val_loss < best_val_loss:
-        best_val_loss = val_loss
-        torch.save(model.state_dict(), "best_model.pth")
-        patience_counter = 0
-    else:
-        patience_counter += 1
-    
-    # Early stopping
-    if patience_counter >= PATIENCE:
-        print(f"Early stopping triggered after {epoch+1} epochs")
-        break
+    wandb.init(project=config.wandb.project, name=config.wandb.name, config=config)
 
-wandb.finish()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Evaluate best model on test set
-model.load_state_dict(torch.load("best_model.pth"))
-test_loss = validate(model, test_loader, criterion, device)
-print(f"Test Loss: {test_loss:.4f}")
+    # create dataloader randomly
+    train_loader, val_loader, test_loader, ligand_edge_dim = create_data_loaders(
+        config.data.lmdb_path, 
+        config.data.batch_size
+    )
 
-print("Training completed.")
+    # initialize the MetaScore model
+    model = MetaScore(
+        protein_input_dim=config.model.protein_input_dim,
+        ligand_input_dim=config.model.ligand_input_dim,
+        protein_hidden_dim=config.model.protein_hidden_dim,
+        ligand_hidden_dim=config.model.ligand_hidden_dim,
+        interaction_dim=config.model.interaction_dim
+    ).to(device)
+
+    # loss and optimizer
+    criterion = nn.SmoothL1Loss()
+    optimizer = optim.Adam(model.parameters(), lr=config.training.learning_rate)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
+
+    # training epoch
+    best_val_loss = float('inf')
+    patience_counter = 0
+
+    for epoch in range(config.training.num_epochs):
+        train_loss = train_epoch(model, train_loader, optimizer, criterion, device)
+        val_loss = validate(model, val_loader, criterion, device)
+        
+        scheduler.step(val_loss)
+        
+        wandb.log({
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "learning_rate": optimizer.param_groups[0]['lr']
+        })
+        
+        print(f"Epoch {epoch+1}/{config.training.num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+        
+        # save the best model
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(model.state_dict(), "best_model.pth")
+            patience_counter = 0
+        else:
+            patience_counter += 1
+        
+        # early stopping
+        if patience_counter >= config.training.patience:
+            print(f"Early stopping triggered after {epoch+1} epochs")
+            break
+
+    wandb.finish()
+
+    # evaluate the best model
+    model.load_state_dict(torch.load("best_model.pth"))
+    test_loss = validate(model, test_loader, criterion, device)
+    print(f"Test Loss: {test_loss:.4f}")
+
+    print("Training completed.")
+
+if __name__ == "__main__":
+    main()

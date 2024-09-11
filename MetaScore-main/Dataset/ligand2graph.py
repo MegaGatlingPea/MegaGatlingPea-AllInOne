@@ -3,7 +3,7 @@ from torch_geometric.data import Data
 from rdkit import Chem
 import numpy as np
 
-# 定义允许的特征
+# define allowable features
 allowable_features = {
     'possible_atomic_num_list' : list(range(1, 119)) + ['misc'],
     'possible_chirality_list' : [

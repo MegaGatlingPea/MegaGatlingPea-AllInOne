@@ -10,6 +10,11 @@ MetaScore-main/
     │   ├── MPNN.py
     ├── ProteinEncoder/
     │   ├── GAT.py
+    ├── utils/
+    │   ├── config.py
+    ├── configs/
+    │   ├── config.yaml
     ├── Project_Tree.txt
     ├── MetaScore.py
+    ├── predict.py
     └── train.py

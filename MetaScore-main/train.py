@@ -52,15 +52,13 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # create dataloader randomly
-    train_loader, val_loader, test_loader, ligand_edge_dim = create_data_loaders(
+    train_loader, val_loader, test_loader = create_data_loaders(
         config.data.lmdb_path, 
         config.data.batch_size
     )
 
     # initialize the MetaScore model
     model = MetaScore(
-        protein_input_dim=config.model.protein_input_dim,
-        ligand_input_dim=config.model.ligand_input_dim,
         protein_hidden_dim=config.model.protein_hidden_dim,
         ligand_hidden_dim=config.model.ligand_hidden_dim,
         interaction_dim=config.model.interaction_dim

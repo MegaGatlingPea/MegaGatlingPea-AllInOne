@@ -1,5 +1,5 @@
 data:
-  lmdb_path: "./../../Testset/pdbbind.lmdb"
+  lmdb_path: "./../Testset/pdbbind.lmdb"
   batch_size: 4
 
 model:

@@ -2,7 +2,7 @@ MetaScore-main/
     ├── Dataset/
     │   ├── Dataloader.py
     │   ├── ligand2graph.py
-    │   ├── protein2graph.py
+    │   ├── pocket2graph.py
     │   └── preprocess.py
     ├── InteractionBlock/
     │   ├── Interaction.py

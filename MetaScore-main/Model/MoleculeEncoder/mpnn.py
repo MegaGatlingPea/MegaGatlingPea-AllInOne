@@ -33,38 +33,37 @@ class MPNNLayer(MessagePassing):
         return self.dropout(self.activation(self.node_mlp(x) + aggr_out))
 
 class MPNN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=3, activation=F.relu, dropout=0.0):
+    def __init__(self, input_dim, edge_dim, hidden_dim, 
+                 output_dim=None, num_layers=3, 
+                 activation=F.relu, dropout=0.0):
         super(MPNN, self).__init__()
         self.input_dim = input_dim
+        self.edge_dim = edge_dim
         self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
+        self.output_dim = output_dim if output_dim is not None else hidden_dim
         self.num_layers = num_layers
         self.activation = activation
         self.dropout = dropout
         
         self.input_proj = nn.Linear(input_dim, hidden_dim)
         
-        # initialize the layers in forward 
-        self.layers = None
+        self.layers = nn.ModuleList([
+            MPNNLayer(hidden_dim, edge_dim, activation, dropout)
+            for _ in range(num_layers)
+        ])
         
         self.output = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             activation(),
             nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
-            nn.Linear(hidden_dim, output_dim)
+            nn.Linear(hidden_dim, self.output_dim)
         )
     
-    def _create_layers(self, edge_dim):
-        self.layers = nn.ModuleList()
-        for _ in range(self.num_layers):
-            self.layers.append(MPNNLayer(self.hidden_dim, edge_dim, self.activation, self.dropout))
-    
     def forward(self, data):
-        x, edge_index, edge_attr, pos, batch = data.x, data.edge_index, data.edge_attr, data.pos, data.batch
-        
-        if self.layers is None:
-            self._create_layers(edge_attr.size(-1))
+        x, edge_index, edge_attr, pos, batch = (
+            data.x, data.edge_index, data.edge_attr, data.pos, data.batch
+        )
         
         h = self.input_proj(x)
         

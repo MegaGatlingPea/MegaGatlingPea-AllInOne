@@ -5,9 +5,9 @@ from torch.utils.data import DataLoader
 import wandb
 from tqdm import tqdm
 
-from utils.config import load_config
-from MetaScore import MetaScore
-from Dataset.Dataloader import create_data_loaders
+from Func.config import load_config
+from Model.MetaScore import MetaScore
+from Data.dataloader import create_data_loaders
 
 def train_epoch(model, loader, optimizer, criterion, device):
     """to train an epoch"""

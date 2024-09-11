@@ -61,6 +61,8 @@ def pocket2graph(pdb_path):
     
     # Add extra structural information
     node_ids = list(g.nodes())
+    
+    '''
     extra_features = torch.tensor([
         [g.nodes[node_id].get('is_helix', 0),
          g.nodes[node_id].get('is_sheet', 0),
@@ -70,6 +72,7 @@ def pocket2graph(pdb_path):
     ])
     
     node_feat = torch.cat([node_feat, extra_features], dim=1)
+    '''
     
     # Create Data object
     pos = torch.tensor([g.nodes[node_id]['coords'] for node_id in node_ids])

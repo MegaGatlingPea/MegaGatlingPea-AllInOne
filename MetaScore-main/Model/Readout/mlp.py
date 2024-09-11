@@ -1,14 +1,14 @@
 import torch.nn as nn
 
 class KdPredictionModule(nn.Module):
-    def __init__(self, input_dim):
+    def __init__(self, input_dim, hidden_dim1=32, hidden_dim2=16):
         super(KdPredictionModule, self).__init__()
         self.mlp = nn.Sequential(
-            nn.Linear(input_dim, 64),
+            nn.Linear(input_dim, hidden_dim1),
             nn.ReLU(),
-            nn.Linear(64, 32),
+            nn.Linear(hidden_dim1, hidden_dim2),
             nn.ReLU(),
-            nn.Linear(32, 1)
+            nn.Linear(hidden_dim2, 1)
         )
 
     def forward(self, x):

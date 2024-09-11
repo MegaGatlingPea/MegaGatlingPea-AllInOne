@@ -1,40 +1,25 @@
 import torch
 from torch import nn
 
-from PocketEncoder.GAT import GAT
-from MoleculeEncoder.MPNN import MPNN
-from InteractionBlock.Interaction import InteractionModule
-from predict import KdPredictionModule
-
-class MoleculeEmbedding(nn.Module):
-    def __init__(self, num_atom_features, num_bond_features, atom_embedding_dim, bond_embedding_dim, offset=128):
-        super(MoleculeEmbedding, self).__init__()
-        self.offset = offset
-        
-        # Atom embedding
-        self.atom_embedding = nn.Embedding(num_atom_features * offset, atom_embedding_dim)
-        
-        # Bond embedding
-        self.bond_embedding = nn.Embedding(num_bond_features * offset, bond_embedding_dim)
-
-    def forward(self, x, edge_attr):
-        # Embed atoms
-        x_embedded = self.atom_embedding(x)
-        
-        # Embed bonds
-        edge_attr_embedded = self.bond_embedding(edge_attr)
-        
-        return x_embedded, edge_attr_embedded
+from MoleculeEmbedding.embedding import MoleculeEmbedding
+from PocketEncoder.gat import GAT
+from MoleculeEncoder.mpnn import MPNN
+from InteractionBlock.interaction import InteractionModule
+from Readout.mlp import KdPredictionModule
 
 class MetaScore(nn.Module):
-    def __init__(self, protein_hidden_dim, ligand_hidden_dim, interaction_dim):
+    def __init__(self, atom_embedding_dim, bond_embedding_dim, protein_hidden_dim, ligand_hidden_dim, interaction_dim):
         super(MetaScore, self).__init__()
-        self.protein_encoder = GAT(protein_hidden_dim, protein_hidden_dim)
-        
+        self.atom_embedding_dim = atom_embedding_dim
+        self.bond_embedding_dim = bond_embedding_dim
         self.molecule_embedding = None
+        
         self.ligand_encoder = MPNN(ligand_hidden_dim, ligand_hidden_dim, ligand_hidden_dim)
         
+        self.protein_encoder = GAT(protein_hidden_dim, protein_hidden_dim)
+        
         self.interaction_module = InteractionModule(protein_hidden_dim, ligand_hidden_dim, interaction_dim)
+        
         self.kd_prediction = KdPredictionModule(interaction_dim)
 
     def forward(self, protein_data, ligand_data):
@@ -42,7 +27,7 @@ class MetaScore(nn.Module):
         if self.molecule_embedding is None:
             num_atom_features = ligand_data.x.size(1)
             num_bond_features = ligand_data.edge_attr.size(1)
-            self.molecule_embedding = MoleculeEmbedding(num_atom_features, num_bond_features, self.ligand_encoder.input_dim)
+            self.molecule_embedding = MoleculeEmbedding(num_atom_features, num_bond_features, self.atom_embedding_dim, self.bond_embedding_dim)
 
         # Encode protein
         protein_repr = self.protein_encoder(protein_data)

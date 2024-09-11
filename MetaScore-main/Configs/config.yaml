@@ -1,0 +1,66 @@
+global:
+  root: "/home/megagatlingpea/workdir/MegaGatlingPea-AllInOne/MetaScore-main"
+  seed: 42
+
+Data:
+  dataloader:
+    lmdb_path: "pdbbind.lmdb"
+    batch_size: 4
+    trn_ratio: 0.7
+    val_ratio: 0.2
+    tst_ratio: 0.1
+
+  ligand2graph:
+    offset: 128
+
+  pocket2graph:
+    long_interaction_threshold: 0
+    threshold: 8
+    residue_embedding_dim: 1280
+
+  preprocess:
+    pdbbind_dir: "/home/megagatlingpea/workdir/MegaGatlingPea-AllInOne/Testset"
+    csv_file: "pdbbind.csv"
+    output_lmdb: "pdbbind.lmdb"
+    mode: "rewrite"
+
+Model:
+  MoleculeEmbedding:
+    embedding:
+      atom_embedding_dim: 256
+      bond_embedding_dim: 64
+      offset: 128
+
+  MoleculeEncoder:
+    mpnn:
+      hidden_dim: 128
+      output_dim: 128
+      num_layers: 3
+      activation: F.relu
+      dropout: 0.0
+
+  PocketEncoder:
+    gat:
+      hidden_dim: 512
+      output_dim: 128
+      num_layers: 3
+      activation: F.relu
+      dropout: 0.2
+
+  InteractionBlock:
+    interaction:
+      hidden_dim: 64
+
+  Readout:
+    mlp:
+      hidden_dim1: 32
+      hidden_dim2: 16
+
+train:
+  learning_rate: 1e-3
+  num_epochs: 100
+  patience: 10
+
+wandb:
+  project: "MetaScore"
+  name: "test_1"

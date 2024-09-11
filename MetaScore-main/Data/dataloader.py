@@ -127,7 +127,7 @@ def collate_fn(batch):
 
 # Usage example
 if __name__ == "__main__":
-    LMDB_PATH = "./../../Testset/pdbbind.lmdb"
+    LMDB_PATH = "./../pdbbind.lmdb"
     BATCH_SIZE = 4
 
     train_loader, val_loader, test_loader = create_data_loaders(LMDB_PATH, BATCH_SIZE)

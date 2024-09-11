@@ -113,8 +113,8 @@ def read_from_lmdb(lmdb_path, cluster_id, pdb_id=None):
 # Usage example
 if __name__ == "__main__":
     pdbbind_dir = "./../../Testset"
-    csv_file = "./../../Testset/pdbbind.csv"
-    output_lmdb = "./../../Testset/pdbbind.lmdb"
+    csv_file = "./../pdbbind.csv"
+    output_lmdb = "./../pdbbind.lmdb"
     
     # Process and store data
     pdbbind2lmdb(pdbbind_dir, csv_file, output_lmdb, mode='update')

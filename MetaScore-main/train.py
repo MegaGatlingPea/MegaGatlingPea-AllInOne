@@ -19,7 +19,7 @@ BATCH_SIZE = 4
 LEARNING_RATE = 1e-3
 NUM_EPOCHS = 300
 PATIENCE = 20  # Early stopping patience
-LMDB_PATH = "path_to_your_lmdb_file"
+LMDB_PATH = "./../Testset/pdbbind.lmdb"
 
 # Create data loaders
 train_loader, val_loader, test_loader = create_data_loaders(LMDB_PATH, BATCH_SIZE)

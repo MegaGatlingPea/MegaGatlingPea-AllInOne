@@ -1,20 +1,25 @@
+/
 MetaScore-main/
-    ├── Dataset/
-    │   ├── Dataloader.py
-    │   ├── ligand2graph.py
-    │   ├── pocket2graph.py
-    │   └── preprocess.py
-    ├── InteractionBlock/
-    │   ├── Interaction.py
-    ├── MoleculeEncoder/
-    │   ├── MPNN.py
-    ├── ProteinEncoder/
-    │   ├── GAT.py
-    ├── utils/
-    │   ├── config.py
-    ├── configs/
-    │   ├── config.yaml
-    ├── Project_Tree.txt
-    ├── MetaScore.py
-    ├── predict.py
-    └── train.py
+    pdbbind.csv
+    train.py
+    Configs/
+        config.yaml
+    Model/
+        MetaScore.py
+        InteractionBlock/
+            interaction.py
+        MoleculeEmbedding/
+            embedding.py
+        MoleculeEncoder/
+            mpnn.py
+        Readout/
+            mlp.py
+        PocketEncoder/
+            gat.py
+    Data/
+        preprocess.py
+        pocket2graph.py
+        dataloader.py
+        ligand2graph.py
+    Func/
+        config.py

@@ -163,6 +163,8 @@ cython_debug/
 model_ckpts/
 *.pth
 *.pt
+*.out
+*.log
 logger/
 *.lmdb/
 *.lmdb

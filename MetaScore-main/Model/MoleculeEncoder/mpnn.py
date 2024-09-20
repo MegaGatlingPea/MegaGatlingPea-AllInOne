@@ -5,13 +5,13 @@ from torch_geometric.nn import MessagePassing, global_mean_pool
 from torch_geometric.utils import add_self_loops
 
 class MPNNLayer(MessagePassing):
-    def __init__(self, hidden_dim, edge_dim, activation=F.relu, dropout=0.0):
+    def __init__(self, hidden_dim, edge_dim, activation=nn.ReLU(), dropout=0.0):
         super(MPNNLayer, self).__init__(aggr='add')
         self.node_mlp = nn.Linear(hidden_dim, hidden_dim)
         self.message_mlp = nn.Sequential(
             nn.Linear(2 * hidden_dim + edge_dim + 3, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
-            activation(),
+            activation,
             nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
             nn.Linear(hidden_dim, hidden_dim)
         )
@@ -33,9 +33,9 @@ class MPNNLayer(MessagePassing):
         return self.dropout(self.activation(self.node_mlp(x) + aggr_out))
 
 class MPNN(nn.Module):
-    def __init__(self, input_dim, edge_dim, hidden_dim, 
-                 output_dim=None, num_layers=3, 
-                 activation=F.relu, dropout=0.0):
+    def __init__(self, input_dim=256, edge_dim=64, hidden_dim=128, 
+                 output_dim=128, num_layers=3, 
+                 activation=nn.ReLU(), dropout=0.1):
         super(MPNN, self).__init__()
         self.input_dim = input_dim
         self.edge_dim = edge_dim
@@ -55,7 +55,7 @@ class MPNN(nn.Module):
         self.output = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
-            activation(),
+            activation,
             nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
             nn.Linear(hidden_dim, self.output_dim)
         )

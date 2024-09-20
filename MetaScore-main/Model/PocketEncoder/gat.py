@@ -5,7 +5,7 @@ from torch_geometric.nn import GATConv, global_mean_pool
 from torch_geometric.nn import LayerNorm
 
 class GAT(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=3, heads=4, dropout=0.2):
+    def __init__(self, input_dim=1284, hidden_dim=512, output_dim=128, num_layers=3, heads=4, activation=nn.ReLU(), dropout=0.2):
         """
         Initialize the GAT.
         
@@ -33,7 +33,7 @@ class GAT(nn.Module):
         
         self.output = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            activation,
             nn.Dropout(dropout),
             nn.Linear(hidden_dim, output_dim)
         )
@@ -56,6 +56,9 @@ class GAT(nn.Module):
         for gat_layer, spatial_layer, layer_norm, alpha in zip(self.gat_layers, self.spatial_layers, self.layer_norms, self.alphas):
             # Graph attention update
             h_gat = gat_layer(h, edge_index)
+            
+            # Ensure pos has the same dtype as h_gat
+            pos = pos.to(h_gat.dtype)
             
             # Spatial information update
             spatial_info = torch.cat([h_gat, pos], dim=-1)

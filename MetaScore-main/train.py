@@ -2,10 +2,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import wandb
+import logging
 from tqdm import tqdm
 
-from Func.config import load_config
 from Model.MetaScore import MetaScore
 from Data.dataloader import create_data_loaders
 
@@ -45,48 +44,58 @@ def validate(model, loader, criterion, device):
     return total_loss / len(loader)
 
 def main():
-    config = load_config('config.yaml')
-
-    wandb.init(project=config.wandb.project, name=config.wandb.name, config=config)
+    # 配置日志
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s',
+        handlers=[logging.StreamHandler()]
+    )
+    logger = logging.getLogger()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # create dataloader randomly
     train_loader, val_loader, test_loader = create_data_loaders(
-        config.data.lmdb_path, 
-        config.data.batch_size
+        lmdb_path='./pdbbind.lmdb', 
+        batch_size=4,
+        train_ratio=0.7,
+        val_ratio=0.2,
+        test_ratio=0.1,
+        seed=42
     )
 
     # initialize the MetaScore model
     model = MetaScore(
-        protein_hidden_dim=config.model.protein_hidden_dim,
-        ligand_hidden_dim=config.model.ligand_hidden_dim,
-        interaction_dim=config.model.interaction_dim
+        num_atom_features=9, 
+        num_bond_features=3, 
+        atom_embedding_dim=256, 
+        bond_embedding_dim=64, 
+        protein_hidden_dim=512, 
+        ligand_hidden_dim=128, 
+        protein_output_dim=128, 
+        ligand_output_dim=128, 
+        interaction_dim=64
     ).to(device)
 
     # loss and optimizer
     criterion = nn.SmoothL1Loss()
-    optimizer = optim.Adam(model.parameters(), lr=config.training.learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
 
     # training epoch
     best_val_loss = float('inf')
     patience_counter = 0
-
-    for epoch in range(config.training.num_epochs):
+    num_epochs = 100
+    for epoch in range(num_epochs):
         train_loss = train_epoch(model, train_loader, optimizer, criterion, device)
         val_loss = validate(model, val_loader, criterion, device)
         
         scheduler.step(val_loss)
         
-        wandb.log({
-            "epoch": epoch,
-            "train_loss": train_loss,
-            "val_loss": val_loss,
-            "learning_rate": optimizer.param_groups[0]['lr']
-        })
+        current_lr = optimizer.param_groups[0]['lr']
+        logger.info(f"{epoch+1} | {train_loss:.4f} | {val_loss:.4f} | {current_lr:.6f}")
         
-        print(f"Epoch {epoch+1}/{config.training.num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
         
         # save the best model
         if val_loss < best_val_loss:
@@ -97,11 +106,10 @@ def main():
             patience_counter += 1
         
         # early stopping
-        if patience_counter >= config.training.patience:
+        patience = 10
+        if patience_counter >= patience:
             print(f"Early stopping triggered after {epoch+1} epochs")
             break
-
-    wandb.finish()
 
     # evaluate the best model
     model.load_state_dict(torch.load("best_model.pth"))

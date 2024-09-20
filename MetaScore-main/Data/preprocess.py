@@ -10,7 +10,7 @@ import shutil
 from pocket2graph import pocket2graph
 from ligand2graph import ligand2graph
 
-def pdbbind2lmdb(pdbbind_dir, csv_file, output_lmdb, mode='update', map_size=1099511627776):
+def pdbbind2lmdb(pdbbind_dir='./../../Testset', csv_file='./../pdbbind.csv', output_lmdb='./../pdbbind.lmdb', mode='update', map_size=1099511627776):
     """
     Process PDBbind data and store in LMDB with cluster organization.
     
@@ -89,7 +89,7 @@ def pdbbind2lmdb(pdbbind_dir, csv_file, output_lmdb, mode='update', map_size=109
     env.close()
     print(f"Data processing complete. LMDB database saved to {output_lmdb}")
 
-def read_from_lmdb(lmdb_path, cluster_id, pdb_id=None):
+def read_from_lmdb(lmdb_path='./../pdbbind.lmdb', cluster_id=1, pdb_id=None):
     """
     Read data for a specific cluster or PDB ID from LMDB database.
     

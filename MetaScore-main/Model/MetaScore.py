@@ -1,34 +1,51 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 
-from MoleculeEmbedding.embedding import MoleculeEmbedding
-from PocketEncoder.gat import GAT
-from MoleculeEncoder.mpnn import MPNN
-from InteractionBlock.interaction import InteractionModule
-from Readout.mlp import KdPredictionModule
+from Model.MoleculeEmbedding.embedding import MoleculeEmbedding
+from Model.PocketEncoder.gat import GAT
+from Model.MoleculeEncoder.mpnn import MPNN
+from Model.InteractionBlock.interaction import InteractionModule
+from Model.Readout.mlp import KdPredictionModule
 
 class MetaScore(nn.Module):
-    def __init__(self, atom_embedding_dim, bond_embedding_dim, protein_hidden_dim, ligand_hidden_dim, interaction_dim):
+    def __init__(self, num_atom_features=9, num_bond_features=3, 
+                 atom_embedding_dim=256, bond_embedding_dim=64, 
+                 protein_hidden_dim=512, ligand_hidden_dim=128, 
+                 protein_output_dim=128, ligand_output_dim=128, 
+                 interaction_dim=64):
+
         super(MetaScore, self).__init__()
-        self.atom_embedding_dim = atom_embedding_dim
-        self.bond_embedding_dim = bond_embedding_dim
-        self.molecule_embedding = None
+
+        self.molecule_embedding = MoleculeEmbedding(
+            num_atom_features, num_bond_features, 
+            atom_embedding_dim, bond_embedding_dim)
+
+        self.ligand_encoder = MPNN(input_dim=atom_embedding_dim, 
+                                   edge_dim=bond_embedding_dim, 
+                                   hidden_dim=ligand_hidden_dim,
+                                   output_dim=ligand_output_dim,
+                                   num_layers=3,
+                                   activation=nn.ReLU(),
+                                   dropout=0.1)
         
-        self.ligand_encoder = MPNN(ligand_hidden_dim, ligand_hidden_dim, ligand_hidden_dim)
+        self.protein_encoder = GAT(input_dim=1284, 
+                                   hidden_dim=protein_hidden_dim,
+                                   output_dim=protein_output_dim,
+                                   num_layers=3,
+                                   heads=4,
+                                   activation=nn.ReLU(),
+                                   dropout=0.2)
         
-        self.protein_encoder = GAT(protein_hidden_dim, protein_hidden_dim)
+        self.interaction_module = InteractionModule(protein_dim=protein_output_dim, 
+                                                    ligand_dim=ligand_output_dim, 
+                                                    hidden_dim=interaction_dim)
         
-        self.interaction_module = InteractionModule(protein_hidden_dim, ligand_hidden_dim, interaction_dim)
-        
-        self.kd_prediction = KdPredictionModule(interaction_dim)
+        self.kd_prediction = KdPredictionModule(input_dim=interaction_dim,
+                                                hidden_dim1=32,
+                                                hidden_dim2=16)
 
     def forward(self, protein_data, ligand_data):
-        # Initialize molecule embedding if not already done
-        if self.molecule_embedding is None:
-            num_atom_features = ligand_data.x.size(1)
-            num_bond_features = ligand_data.edge_attr.size(1)
-            self.molecule_embedding = MoleculeEmbedding(num_atom_features, num_bond_features, self.atom_embedding_dim, self.bond_embedding_dim)
-
         # Encode protein
         protein_repr = self.protein_encoder(protein_data)
         

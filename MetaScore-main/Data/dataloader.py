@@ -4,6 +4,7 @@ import pickle
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch_geometric.data import Batch
+import logging
 
 class PDBBindDataset(Dataset):
     def __init__(self, lmdb_path, pdb_ids=None):
@@ -105,6 +106,12 @@ def create_data_loaders(lmdb_path='./../pdbbind.lmdb', batch_size=4, train_ratio
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
     
+    # append logger (optional)
+    logger = logging.getLogger()
+    logger.info(f"Train dataset size: {len(train_dataset)}")
+    logger.info(f"Validation dataset size: {len(val_dataset)}")
+    logger.info(f"Test dataset size: {len(test_dataset)}")
+
     return train_loader, val_loader, test_loader
 
 def collate_fn(batch):

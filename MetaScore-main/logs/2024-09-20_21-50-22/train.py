@@ -74,7 +74,7 @@ def main():
 
     # copy the model code and configuration file to the log directory
     # shutil.copytree('Model', os.path.join(log_dir, 'Model'))
-    shutil.copy('train.py', log_dir)
+    # shutil.copy('train.py', log_dir)
     # if you have a configuration file, you can copy it
     # shutil.copy('config.yml', log_dir)
 
@@ -121,7 +121,10 @@ def main():
         scheduler.step(val_loss)
         
         current_lr = optimizer.param_groups[0]['lr']
-        logger.info(f"{epoch+1} | {train_loss:.4f} | {val_loss:.4f} | {current_lr:.6f}")
+        logger.info(f"Epoch {epoch+1}/{num_epochs} | 
+                    Train Loss: {train_loss:.4f} | 
+                    Val Loss: {val_loss:.4f} | 
+                    LR: {current_lr:.6f}")
         
         print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
         
@@ -130,7 +133,7 @@ def main():
             best_val_loss = val_loss
             checkpoint_path = os.path.join(log_dir, 'best_model.pth')
             torch.save(model.state_dict(), checkpoint_path)
-            logger.info(f"Saved best model to {checkpoint_path}")
+            # logger.info(f"Saved best model to {checkpoint_path}")
             patience_counter = 0
         else:
             patience_counter += 1
@@ -138,13 +141,17 @@ def main():
         # early stopping
         patience = 10
         if patience_counter >= patience:
-            print(f"Early stopping triggered after {epoch+1} epochs")
+            logger.info(f"Early stopping triggered after {epoch+1} epochs")
             break
 
     # evaluate the best model
     model.load_state_dict(torch.load(checkpoint_path))
     test_loss = validate(model, test_loader, criterion, device, logger)
-    logger.info(f"Test Loss: {test_loss:.4f}")
+    logger.info(f"Training completed. 
+                Epoch {epoch+1}/{num_epochs} | 
+                Train Loss: {train_loss:.4f} | 
+                Val Loss: {val_loss:.4f} | 
+                Test Loss: {test_loss:.4f}")
 
     print("Training completed.")
 

@@ -59,7 +59,7 @@ class PDBBindDataset(Dataset):
         """Close the LMDB environment when the object is deleted."""
         self.env.close()
         
-def create_data_loaders(lmdb_path='./../pdbbind.lmdb', batch_size=4, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, seed=42):
+def create_data_loaders(lmdb_path='./../pdbbind.lmdb', batch_size=4, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1, seed=42, num_workers=4, pin_memory=True):
     """
     Create DataLoaders for train, validation, and test sets.
 
@@ -102,9 +102,9 @@ def create_data_loaders(lmdb_path='./../pdbbind.lmdb', batch_size=4, train_ratio
     test_dataset = PDBBindDataset(lmdb_path, test_pdb_ids)
     
     # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn, num_workers=num_workers, pin_memory=pin_memory)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn, num_workers=num_workers, pin_memory=pin_memory)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn, num_workers=num_workers, pin_memory=pin_memory)
     
     # append logger (optional)
     logger = logging.getLogger()

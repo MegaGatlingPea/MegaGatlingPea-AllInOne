@@ -70,7 +70,7 @@ def main():
     early_stopping = EarlyStopping(patience=60, verbose=True, logger=None, path=os.path.join(log_dir, 'best_model.pth'))
 
     # train loop
-    num_epochs = 100
+    num_epochs = 200
     best_epoch = 0
     best_train_loss = float('inf')
     best_val_loss = float('inf')
@@ -82,7 +82,10 @@ def main():
         scheduler.step(val_loss)
 
         current_lr = optimizer.param_groups[0]['lr']
-        logger.info(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | LR: {current_lr:.6f}")
+        logger.info(f"Epoch {epoch+1}/{num_epochs} | 
+                      Train Loss: {train_loss:.4f} | 
+                      Val Loss: {val_loss:.4f} | 
+                      LR: {current_lr:.6f}")
 
         # Clear cache and collect garbage
         torch.cuda.empty_cache()

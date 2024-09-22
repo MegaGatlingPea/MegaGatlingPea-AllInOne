@@ -82,10 +82,7 @@ def main():
         scheduler.step(val_loss)
 
         current_lr = optimizer.param_groups[0]['lr']
-        logger.info(f"Epoch {epoch+1}/{num_epochs} | 
-                      Train Loss: {train_loss:.4f} | 
-                      Val Loss: {val_loss:.4f} | 
-                      LR: {current_lr:.6f}")
+        logger.info(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | LR: {current_lr:.6f}")
 
         # Clear cache and collect garbage
         torch.cuda.empty_cache()

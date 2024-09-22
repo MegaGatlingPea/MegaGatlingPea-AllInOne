@@ -75,7 +75,10 @@ def pocket2graph(pdb_path):
     '''
     
     # Create Data object
-    pos = torch.tensor([g.nodes[node_id]['coords'] for node_id in node_ids])
+    coords_list = [g.nodes[node_id]['coords'] for node_id in node_ids]
+    coords_array = np.array(coords_list)  # transfer to numpy.ndarray
+    pos = torch.from_numpy(coords_array).float()  # transfer to torch.Tensor, and specify data type
+    
     data = Data(x=node_feat, edge_index=edge_index, pos=pos)
     
     return data

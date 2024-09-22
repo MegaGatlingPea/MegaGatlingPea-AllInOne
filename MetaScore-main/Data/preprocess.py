@@ -10,15 +10,16 @@ import shutil
 from pocket2graph import pocket2graph
 from ligand2graph import ligand2graph
 
-def pdbbind2lmdb(pdbbind_dir='./../../Testset', csv_file='./../pdbbind.csv', output_lmdb='./../pdbbind.lmdb', mode='update', map_size=1099511627776):
+def pdbbind2lmdb(pdbbind_dir='./../../Testset', csv_file='./../pdbbind.csv', output_lmdb='./../pdbbind.lmdb', mode='rewrite', map_size=1099511627776, batch_size=32):
     """
-    Process PDBbind data and store in LMDB with cluster organization.
+    Process PDBbind data and store in LMDB with cluster organization using batch writing.
     
     :param pdbbind_dir: Directory containing PDBbind data
     :param csv_file: Path to pdbbind.csv file containing Kd values and cluster information
     :param output_lmdb: Path to output LMDB file
     :param mode: 'rewrite' to create a new LMDB, 'update' to update existing or create new
     :param map_size: Maximum size database may grow to; default is 1TB
+    :param batch_size: Number of clusters to write in each batch
     """
     if mode == 'rewrite' and os.path.exists(output_lmdb):
         shutil.rmtree(output_lmdb)
@@ -42,11 +43,12 @@ def pdbbind2lmdb(pdbbind_dir='./../../Testset', csv_file='./../pdbbind.csv', out
     data_dict = data.set_index('pdb_id').to_dict('index')
 
     env = lmdb.open(output_lmdb, map_size=map_size)
-
+    
     cluster_data = {}
+    clusters_processed = 0
 
     with env.begin(write=True) as txn:
-        for pdb_id in tqdm(os.listdir(pdbbind_dir)):
+        for pdb_id in tqdm(os.listdir(pdbbind_dir), desc="Processing PDB IDs"):
             pdb_dir = os.path.join(pdbbind_dir, pdb_id)
             if not os.path.isdir(pdb_dir):
                 continue
@@ -79,12 +81,24 @@ def pdbbind2lmdb(pdbbind_dir='./../../Testset', csv_file='./../pdbbind.csv', out
                         cluster_data[cluster_key] = {}
                     cluster_data[cluster_key][pdb_id] = pdb_data
 
+                    # determine if the batch size is reached
+                    if len(cluster_data) >= batch_size:
+                        for key, cluster_dict in cluster_data.items():
+                            txn.put(key.encode(), pickle.dumps(cluster_dict))
+                        clusters_processed += len(cluster_data)
+                        print(f"Have processed {clusters_processed} clusters")
+                        cluster_data.clear()  # clear the current batch data
+
             except Exception as e:
                 print(f"Error processing {pdb_id}: {str(e)}")
 
-        # Store all data in LMDB
-        for cluster_key, cluster_dict in cluster_data.items():
-            txn.put(cluster_key.encode(), pickle.dumps(cluster_dict))
+        # write the remaining data
+        if cluster_data:
+            for key, cluster_dict in cluster_data.items():
+                txn.put(key.encode(), pickle.dumps(cluster_dict))
+            clusters_processed += len(cluster_data)
+            print(f"Have processed last {len(cluster_data)} clusters")
+            cluster_data.clear()
 
     env.close()
     print(f"Data processing complete. LMDB database saved to {output_lmdb}")
@@ -117,7 +131,7 @@ if __name__ == "__main__":
     output_lmdb = "./../pdbbind.lmdb"
     
     # Process and store data
-    pdbbind2lmdb(pdbbind_dir, csv_file, output_lmdb, mode='update')
+    pdbbind2lmdb(pdbbind_dir, csv_file, output_lmdb, mode='rewrite', batch_size=32)
     
     # Example of reading data
     cluster_id = 1  # Assuming we want to read data from cluster_1

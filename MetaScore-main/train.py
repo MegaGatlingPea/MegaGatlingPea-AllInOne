@@ -14,6 +14,9 @@ from Func.early_stopping import EarlyStopping
 from Func.lr_scheduler import LRScheduler
 from Func.trainer import Trainer
 
+import warnings
+warnings.filterwarnings("ignore", message="TypedStorage is deprecated")
+
 def main():
     # get the current time as the log directory name
     current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -43,25 +46,28 @@ def main():
     model = MetaScore(
         num_atom_features=9,
         num_bond_features=3,
-        atom_embedding_dim=256,
-        bond_embedding_dim=64,
+        atom_embedding_dim=384,
+        bond_embedding_dim=128,
         protein_hidden_dim=512,
-        ligand_hidden_dim=128,
-        protein_output_dim=128,
-        ligand_output_dim=128,
-        interaction_dim=64
+        ligand_hidden_dim=512,
+        protein_output_dim=256,
+        ligand_output_dim=256,
+        interaction_dim=128,
+        interaction_hidden_dim1=64,
+        interaction_hidden_dim2=64,
+        dropout=0.2
     ).to(device)
 
     # loss and optimizer
     criterion = nn.SmoothL1Loss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
     scheduler = LRScheduler(optimizer)
 
     # initialize Trainer
-    trainer = Trainer(model, optimizer, criterion, device, logger, max_grad_norm=1.0)
+    trainer = Trainer(model, optimizer, criterion, device, logger, max_grad_norm=1.0, use_amp=False)
 
     # initialize EarlyStopping
-    early_stopping = EarlyStopping(patience=10, verbose=True, logger=None, path=os.path.join(log_dir, 'best_model.pth'))
+    early_stopping = EarlyStopping(patience=60, verbose=True, logger=None, path=os.path.join(log_dir, 'best_model.pth'))
 
     # train loop
     num_epochs = 100
@@ -83,9 +89,9 @@ def main():
         gc.collect()
 
         # Monitor memory usage
-        current_memory = torch.cuda.memory_allocated(device) / (1024 ** 3)
-        peak_memory = torch.cuda.max_memory_allocated(device) / (1024 ** 3)
-        logger.info(f"Current Memory: {current_memory:.2f} GB | Peak Memory: {peak_memory:.2f} GB")
+        # current_memory = torch.cuda.memory_allocated(device) / (1024 ** 3)
+        #peak_memory = torch.cuda.max_memory_allocated(device) / (1024 ** 3)
+        # logger.info(f"Current Memory: {current_memory:.2f} GB | Peak Memory: {peak_memory:.2f} GB")
 
         # save the best model and check the early stopping condition
         early_stopping(val_loss, model)

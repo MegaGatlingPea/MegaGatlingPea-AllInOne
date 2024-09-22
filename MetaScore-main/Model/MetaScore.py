@@ -10,10 +10,11 @@ from Model.Readout.mlp import KdPredictionModule
 
 class MetaScore(nn.Module):
     def __init__(self, num_atom_features=9, num_bond_features=3, 
-                 atom_embedding_dim=256, bond_embedding_dim=64, 
-                 protein_hidden_dim=512, ligand_hidden_dim=128, 
-                 protein_output_dim=128, ligand_output_dim=128, 
-                 interaction_dim=64):
+                 atom_embedding_dim=512, bond_embedding_dim=128, 
+                 protein_hidden_dim=512, ligand_hidden_dim=512, 
+                 protein_output_dim=256, ligand_output_dim=256, 
+                 interaction_dim=128, interaction_hidden_dim1=64, interaction_hidden_dim2=64,
+                 dropout=0.2):
 
         super(MetaScore, self).__init__()
 
@@ -27,7 +28,7 @@ class MetaScore(nn.Module):
                                    output_dim=ligand_output_dim,
                                    num_layers=3,
                                    activation=nn.ReLU(),
-                                   dropout=0.1)
+                                   dropout=dropout)
         
         self.protein_encoder = GAT(input_dim=1284, 
                                    hidden_dim=protein_hidden_dim,
@@ -35,15 +36,15 @@ class MetaScore(nn.Module):
                                    num_layers=3,
                                    heads=4,
                                    activation=nn.ReLU(),
-                                   dropout=0.2)
+                                   dropout=dropout)
         
         self.interaction_module = InteractionModule(protein_dim=protein_output_dim, 
                                                     ligand_dim=ligand_output_dim, 
                                                     hidden_dim=interaction_dim)
         
         self.kd_prediction = KdPredictionModule(input_dim=interaction_dim,
-                                                hidden_dim1=32,
-                                                hidden_dim2=16)
+                                                hidden_dim1=interaction_hidden_dim1,
+                                                hidden_dim2=interaction_hidden_dim2)
 
     def forward(self, protein_data, ligand_data):
         # Encode protein

@@ -6,25 +6,17 @@ from tqdm import tqdm
 import shutil
 import gc
 import psutil
+import time
 
 from pocket2graph import pocket2graph
 from ligand2graph import ligand2graph
 
 def log_memory_usage(stage):
     process = psutil.Process(os.getpid())
-    mem = process.memory_info().rss / (1024 ** 3)  # 以 GB 为单位
+    mem = process.memory_info().rss / (1024 ** 3)  # in GB
     print(f"[Memory] {stage}: {mem:.2f} GB")
 
-def pdbbind2lmdb(pdbbind_dir, csv_file, output_dir, mode='rewrite', map_size=1e9):
-    """
-    Process PDBbind data and store in per-cluster LMDB databases.
-
-    :param pdbbind_dir: Directory containing PDBbind data
-    :param csv_file: Path to pdbbind.csv file containing Kd values and cluster information
-    :param output_dir: Directory to store output LMDB databases
-    :param mode: 'rewrite' to create new LMDBs, 'update' to update existing ones
-    :param map_size: Maximum size database may grow to; default is ~1GB per cluster
-    """
+def pdbbind2lmdb(pdbbind_dir, csv_file, output_dir, mode='rewrite', map_size=1e9, max_pdbs_per_txn=100):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f"Created output directory at {output_dir}")
@@ -43,14 +35,14 @@ def pdbbind2lmdb(pdbbind_dir, csv_file, output_dir, mode='rewrite', map_size=1e9
 
         env = lmdb.open(lmdb_path, map_size=map_size)
         txn = env.begin(write=True)
+        pdbs_in_txn = 0  # number of PDBs processed in the current transaction
+
         for pdb_id in tqdm(pdb_ids, desc=f"Processing PDB IDs in cluster {cluster_id}"):
             pdb_dir = os.path.join(pdbbind_dir, pdb_id)
             if not os.path.isdir(pdb_dir):
                 continue
 
             try:
-                log_memory_usage(f"Before processing PDB ID {pdb_id}")
-
                 # Process protein
                 protein_file = os.path.join(pdb_dir, f"{pdb_id}_protein.pdb")
                 if os.path.exists(protein_file):
@@ -80,27 +72,34 @@ def pdbbind2lmdb(pdbbind_dir, csv_file, output_dir, mode='rewrite', map_size=1e9
 
                 # Store pdb_data in LMDB
                 txn.put(pdb_id.encode(), pickle.dumps(pdb_data))
-
-                log_memory_usage(f"After processing PDB ID {pdb_id}")
+                pdbs_in_txn += 1
 
                 # Clean up
                 del protein_data, ligand_data, pdb_data
-                gc.collect()
+
+                # judge whether to commit
+                if pdbs_in_txn >= max_pdbs_per_txn:
+                    txn.commit()
+                    txn = env.begin(write=True)
+                    pdbs_in_txn = 0  # reset
+                    gc.collect()
 
             except Exception as e:
                 print(f"Error processing {pdb_id}: {str(e)}")
 
+        # commit the remaining transaction
         txn.commit()
         env.close()
         print(f"Finished processing cluster {cluster_id}. LMDB saved at {lmdb_path}")
 
     print("Data processing complete. All LMDB databases are saved.")
 
+
 # Usage example
 if __name__ == "__main__":
-    pdbbind_dir = "./../../Testset"
-    csv_file = "./../pdbbind.csv"
-    output_dir = "./../cluster_data"
+    pdbbind_dir = "/mnt/data/pdbbind2020-PL"
+    csv_file = "./../pdbbind_general.csv"
+    output_dir = "./../cluster_pdbbind"
 
     # Process and store data
-    pdbbind2lmdb(pdbbind_dir, csv_file, output_dir, mode='rewrite')
+    pdbbind2lmdb(pdbbind_dir, csv_file, output_dir, mode='update')

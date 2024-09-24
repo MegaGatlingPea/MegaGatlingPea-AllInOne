@@ -3,8 +3,6 @@ import lmdb
 import pickle
 import pandas as pd
 from tqdm import tqdm
-import torch
-from torch_geometric.data import Data
 import shutil
 import gc
 import psutil
@@ -14,51 +12,38 @@ from ligand2graph import ligand2graph
 
 def log_memory_usage(stage):
     process = psutil.Process(os.getpid())
-    mem = process.memory_info().rss / (1024 ** 3)  # 以GB为单位
+    mem = process.memory_info().rss / (1024 ** 3)  # 以 GB 为单位
     print(f"[Memory] {stage}: {mem:.2f} GB")
 
-def pdbbind2lmdb(pdbbind_dir='./../../Testset', csv_file='./../pdbbind.csv', output_lmdb='./../pdbbind.lmdb', mode='rewrite', map_size=120 * 1024 ** 3, batch_size=16):
+def pdbbind2lmdb(pdbbind_dir, csv_file, output_dir, mode='rewrite', map_size=1e9):
     """
-    Process PDBbind data and store in LMDB with cluster organization using batch writing.
-    
+    Process PDBbind data and store in per-cluster LMDB databases.
+
     :param pdbbind_dir: Directory containing PDBbind data
     :param csv_file: Path to pdbbind.csv file containing Kd values and cluster information
-    :param output_lmdb: Path to output LMDB file
-    :param mode: 'rewrite' to create a new LMDB, 'update' to update existing or create new
-    :param map_size: Maximum size database may grow to; default is ~120GB
-    :param batch_size: Number of clusters to write in each batch
+    :param output_dir: Directory to store output LMDB databases
+    :param mode: 'rewrite' to create new LMDBs, 'update' to update existing ones
+    :param map_size: Maximum size database may grow to; default is ~1GB per cluster
     """
-    if mode == 'rewrite' and os.path.exists(output_lmdb):
-        shutil.rmtree(output_lmdb)
-        print(f"Removed existing LMDB at {output_lmdb}")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Created output directory at {output_dir}")
 
-    if mode == 'update' and os.path.exists(output_lmdb):
-        try:
-            # Test if the existing LMDB can be read
-            with lmdb.open(output_lmdb, readonly=True) as env:
-                with env.begin() as txn:
-                    cursor = txn.cursor()
-                    test_key = next(cursor)
-                    test_value = txn.get(test_key[0])
-                    if test_value is not None:
-                        print(f"Existing LMDB at {output_lmdb} is valid. No action needed.")
-                        return
-        except Exception as e:
-            print(f"Existing LMDB at {output_lmdb} is invalid or empty. Recreating...")
-            shutil.rmtree(output_lmdb)
-            print(f"Removed invalid LMDB at {output_lmdb}")
-    
-    # Read CSV file, including Kd values and cluster information
+    # Read CSV and group PDB IDs by cluster
     data = pd.read_csv(csv_file)
+    cluster_to_pdb_ids = data.groupby('cluster')['pdb_id'].apply(list).to_dict()
     data_dict = data.set_index('pdb_id').to_dict('index')
 
-    env = lmdb.open(output_lmdb, map_size=map_size)
+    for cluster_id, pdb_ids in tqdm(cluster_to_pdb_ids.items(), desc="Processing Clusters"):
+        lmdb_path = os.path.join(output_dir, f"cluster_{cluster_id}.lmdb")
 
-    cluster_data = {}
-    clusters_processed = 0
+        if mode == 'rewrite' and os.path.exists(lmdb_path):
+            shutil.rmtree(lmdb_path)
+            print(f"Removed existing LMDB at {lmdb_path}")
 
-    with env.begin(write=True) as txn:
-        for pdb_id in tqdm(os.listdir(pdbbind_dir), desc="Processing PDB IDs"):
+        env = lmdb.open(lmdb_path, map_size=map_size)
+        txn = env.begin(write=True)
+        for pdb_id in tqdm(pdb_ids, desc=f"Processing PDB IDs in cluster {cluster_id}"):
             pdb_dir = os.path.join(pdbbind_dir, pdb_id)
             if not os.path.isdir(pdb_dir):
                 continue
@@ -68,106 +53,54 @@ def pdbbind2lmdb(pdbbind_dir='./../../Testset', csv_file='./../pdbbind.csv', out
 
                 # Process protein
                 protein_file = os.path.join(pdb_dir, f"{pdb_id}_protein.pdb")
-                protein_data = pocket2graph(protein_file) if os.path.exists(protein_file) else None
+                if os.path.exists(protein_file):
+                    protein_data = pocket2graph(protein_file)
+                else:
+                    protein_data = None
+                    print(f"Protein file not found for {pdb_id}")
 
                 # Process ligand
                 ligand_file = os.path.join(pdb_dir, f"{pdb_id}_ligand.sdf")
-                ligand_data = ligand2graph(ligand_file) if os.path.exists(ligand_file) else None
-                
-                # Get Kd value and cluster ID
+                if os.path.exists(ligand_file):
+                    ligand_data = ligand2graph(ligand_file)
+                else:
+                    ligand_data = None
+                    print(f"Ligand file not found for {pdb_id}")
+
+                # Get Kd value
                 pdb_info = data_dict.get(pdb_id, {})
                 kd_value = pdb_info.get('kd_value')
-                cluster_id = pdb_info.get('cluster')
 
-                if cluster_id is not None:
-                    cluster_key = f'cluster_{cluster_id}'
-                    
-                    # Create nested dictionary
-                    pdb_data = {
-                        'protein_graph': protein_data,
-                        'ligand_graph': ligand_data,
-                        'kd_value': kd_value
-                    }
+                # Collect pdb_data
+                pdb_data = {
+                    'protein_graph': protein_data,
+                    'ligand_graph': ligand_data,
+                    'kd_value': kd_value
+                }
 
-                    if cluster_key not in cluster_data:
-                        cluster_data[cluster_key] = {}
-                    cluster_data[cluster_key][pdb_id] = pdb_data
-
-                    # Determine if the batch size is reached
-                    if len(cluster_data) >= batch_size:
-                        for key, cluster_dict in cluster_data.items():
-                            txn.put(key.encode(), pickle.dumps(cluster_dict))
-                        clusters_processed += len(cluster_data)
-                        print(f"Have processed {clusters_processed} clusters")
-                        cluster_data.clear()  # Clear the current batch data
+                # Store pdb_data in LMDB
+                txn.put(pdb_id.encode(), pickle.dumps(pdb_data))
 
                 log_memory_usage(f"After processing PDB ID {pdb_id}")
 
-                # 手动垃圾回收
+                # Clean up
                 del protein_data, ligand_data, pdb_data
                 gc.collect()
 
             except Exception as e:
                 print(f"Error processing {pdb_id}: {str(e)}")
 
-        # Write the remaining data
-        if cluster_data:
-            for key, cluster_dict in cluster_data.items():
-                txn.put(key.encode(), pickle.dumps(cluster_dict))
-            clusters_processed += len(cluster_data)
-            print(f"Have processed last {len(cluster_data)} clusters")
-            cluster_data.clear()
+        txn.commit()
+        env.close()
+        print(f"Finished processing cluster {cluster_id}. LMDB saved at {lmdb_path}")
 
-    env.close()
-    print(f"Data processing complete. LMDB database saved to {output_lmdb}")
-
-def read_from_lmdb(lmdb_path='./../pdbbind.lmdb', cluster_id=1, pdb_id=None):
-    """
-    Read data for a specific cluster or PDB ID from LMDB database.
-    
-    :param lmdb_path: Path to LMDB database
-    :param cluster_id: Cluster ID to retrieve
-    :param pdb_id: PDB ID to retrieve (optional)
-    :return: Dictionary containing cluster data or specific PDB ID data
-    """
-    env = lmdb.open(lmdb_path, readonly=True)
-    with env.begin() as txn:
-        cluster_key = f'cluster_{cluster_id}'.encode()
-        cluster_data = txn.get(cluster_key)
-        if cluster_data is not None:
-            cluster_dict = pickle.loads(cluster_data)
-            if pdb_id:
-                return cluster_dict.get(pdb_id)
-            return cluster_dict
-    env.close()
-    return None
+    print("Data processing complete. All LMDB databases are saved.")
 
 # Usage example
 if __name__ == "__main__":
-    pdbbind_dir = "/mnt/data/pdbbind2020-PL"
-    csv_file = "/home/megagatlingpea/workdir/MetaScore/pdbbind_general.csv"
-    output_lmdb = "/home/megagatlingpea/workdir/MegaGatlingPea-AllInOne/MetaScore-main/pdbbind_general.lmdb"
-    
+    pdbbind_dir = "./../../Testset"
+    csv_file = "./../pdbbind.csv"
+    output_dir = "./../cluster_data"
+
     # Process and store data
-    pdbbind2lmdb(pdbbind_dir, csv_file, output_lmdb, mode='rewrite', batch_size=16)
-    
-    # Example of reading data
-    cluster_id = 1  # Assuming we want to read data from cluster_1
-    pdb_id = "4ytc"  # Assuming this PDB ID is in cluster_1
-    
-    # Read data for the entire cluster
-    cluster_data = read_from_lmdb(output_lmdb, cluster_id)
-    if cluster_data is not None:
-        print(f"Cluster {cluster_id} contains {len(cluster_data)} PDB entries")
-    
-    # Read data for a specific PDB ID
-    pdb_data = read_from_lmdb(output_lmdb, cluster_id, pdb_id)
-    if pdb_data is not None:
-        print(f"Data for {pdb_id} in cluster {cluster_id}:")
-        if pdb_data['protein_graph'] is not None:
-            print(f"Protein graph nodes: {pdb_data['protein_graph'].x.shape[0]}")
-        if pdb_data['ligand_graph'] is not None:
-            print(f"Ligand graph nodes: {pdb_data['ligand_graph'].x.shape[0]}")
-        print(f"Kd value: {pdb_data['kd_value']}")
-    else:
-        print(f"No data found for {pdb_id} in cluster {cluster_id}")
+    pdbbind2lmdb(pdbbind_dir, csv_file, output_dir, mode='rewrite')

@@ -166,5 +166,6 @@ model_ckpts/
 *.out
 *.log
 logs/
+*.zip
 *.lmdb/
 *.lmdb

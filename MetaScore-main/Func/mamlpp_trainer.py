@@ -4,7 +4,7 @@ from torch_geometric.data import Batch
 import higher
 
 class MAMLPlusPlusTrainer:
-    def __init__(self, model, meta_optimizer, learnable_lr, task_attention, loss_fn, device, num_inner_loops=1):
+    def __init__(self, model, meta_optimizer, learnable_lr, task_attention, loss_fn, device, num_inner_loops=1, logger=None):
         """
         Initialize the MAML++ trainer.
 
@@ -24,6 +24,7 @@ class MAMLPlusPlusTrainer:
         self.loss_fn = loss_fn
         self.device = device
         self.num_inner_loops = num_inner_loops
+        self.logger = logger
 
     def train_epoch(self, dataloader):
         """
@@ -111,6 +112,9 @@ class MAMLPlusPlusTrainer:
 
             # Record meta loss
             meta_loss_epoch += meta_loss.item()
+
+            if self.logger:
+                self.logger.info(f"Batch [{batch_idx + 1}/{len(dataloader)}], Meta Loss: {meta_loss.item():.4f}")
 
         # Calculate average meta loss
         avg_meta_loss = meta_loss_epoch / len(dataloader)

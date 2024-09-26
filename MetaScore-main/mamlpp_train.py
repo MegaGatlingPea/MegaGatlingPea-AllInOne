@@ -12,6 +12,7 @@ from Data.metadata import MetaDataset
 from Func.mamlpp_trainer import MAMLPlusPlusTrainer
 from Func.lr_config import LearnableLR
 from Func.taskattention import TaskAttention
+from Func.logger import Logger
 
 def main():
     # set parameters
@@ -24,6 +25,11 @@ def main():
     meta_lr = 1e-4            # outer loop learning rate
     num_epochs = 100
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    log_dir = './mamlpp_logs'
+    os.makedirs(log_dir, exist_ok=True)
+
+    # initialize logger
+    logger = Logger(log_dir, log_file='mamlpp_train.log').get_logger()
 
     # create MetaDataset instance
     dataset = MetaDataset(cluster_data_dir=cluster_data_dir, k_shot=k_shot, k_query=k_query)
@@ -39,9 +45,20 @@ def main():
     )
 
     # initialize MetaScore model
-    input_dim_protein = 100  # adjust according to actual data
-    input_dim_ligand = 100   # adjust according to actual data
-    model = MetaScore(input_dim_protein, input_dim_ligand)
+    model = MetaScore(
+        num_atom_features=9,
+        num_bond_features=3,
+        atom_embedding_dim=384,
+        bond_embedding_dim=128,
+        protein_hidden_dim=512,
+        ligand_hidden_dim=512,
+        protein_output_dim=256,
+        ligand_output_dim=256,
+        interaction_dim=128,
+        interaction_hidden_dim1=64,
+        interaction_hidden_dim2=64,
+        dropout=0.2
+    ).to(device)
 
     # define loss function
     loss_fn = nn.MSELoss()
@@ -68,13 +85,14 @@ def main():
         task_attention=task_attention,
         loss_fn=loss_fn,
         device=device,
-        num_inner_loops=num_inner_loops
+        num_inner_loops=num_inner_loops,
+        logger=logger
     )
 
     # start training
     for epoch in range(1, num_epochs + 1):
         avg_meta_loss = trainer.train_epoch(dataloader)
-        print(f"Epoch [{epoch}/{num_epochs}], Meta Loss: {avg_meta_loss:.4f}")
+        logger.info(f"Epoch [{epoch}/{num_epochs}], Meta Loss: {avg_meta_loss:.4f}")
 
         # save model every certain epochs
         if epoch % 10 == 0:
@@ -86,7 +104,7 @@ def main():
                 'task_attention_state_dict': task_attention.state_dict(),
                 'optimizer_state_dict': meta_optimizer.state_dict(),
             }, checkpoint_path)
-            print(f"Saved checkpoint: {checkpoint_path}")
+            logger.info(f"Saved checkpoint: {checkpoint_path}")
 
 if __name__ == '__main__':
     main()

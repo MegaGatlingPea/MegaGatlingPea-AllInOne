@@ -6,6 +6,9 @@ class Logger:
         self.logger = logging.getLogger()
         self.logger.setLevel(logging.INFO)
 
+        if self.logger.hasHandlers():
+            self.logger.handlers.clear()
+            
         # create formatter
         formatter = logging.Formatter('%(levelname)s | %(message)s')
 
@@ -21,3 +24,4 @@ class Logger:
 
     def get_logger(self):
         return self.logger
+

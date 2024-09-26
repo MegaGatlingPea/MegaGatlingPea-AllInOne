@@ -30,7 +30,7 @@ class MetaScore(nn.Module):
                                    activation=nn.ReLU(),
                                    dropout=dropout)
         
-        self.protein_encoder = GAT(input_dim=1284, 
+        self.protein_encoder = GAT(input_dim=1280, 
                                    hidden_dim=protein_hidden_dim,
                                    output_dim=protein_output_dim,
                                    num_layers=3,

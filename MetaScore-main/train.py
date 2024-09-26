@@ -32,7 +32,7 @@ def main():
 
     # create dataloader randomly
     train_loader, val_loader, test_loader = create_data_loaders(
-        lmdb_path='./pdbbind.lmdb',
+        cluster_data_dir='./cluster_data',
         batch_size=4,
         train_ratio=0.7,
         val_ratio=0.2,
@@ -90,7 +90,7 @@ def main():
 
         # Monitor memory usage
         # current_memory = torch.cuda.memory_allocated(device) / (1024 ** 3)
-        #peak_memory = torch.cuda.max_memory_allocated(device) / (1024 ** 3)
+        # peak_memory = torch.cuda.max_memory_allocated(device) / (1024 ** 3)
         # logger.info(f"Current Memory: {current_memory:.2f} GB | Peak Memory: {peak_memory:.2f} GB")
 
         # save the best model and check the early stopping condition

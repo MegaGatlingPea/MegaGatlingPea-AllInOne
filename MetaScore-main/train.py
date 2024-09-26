@@ -11,7 +11,7 @@ from Model.MetaScore import MetaScore
 from Data.dataloader import create_data_loaders
 from Func.logger import Logger
 from Func.early_stopping import EarlyStopping
-from Func.lr_scheduler import LRScheduler
+from Func.lr_config import LRScheduler
 from Func.trainer import Trainer
 
 import warnings

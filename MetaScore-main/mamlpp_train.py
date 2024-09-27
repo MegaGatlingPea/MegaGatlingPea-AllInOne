@@ -20,7 +20,7 @@ def main():
     k_shot = 2
     k_query = 2
     meta_batch_size = 4       # number of tasks in a batch
-    num_inner_loops = 4       # number of inner loop updates
+    num_inner_loops = 5       # number of inner loop updates
     init_inner_lr = 0.001     # initial value of inner loop learning rate
     meta_lr = 1e-4            # outer loop learning rate
     num_epochs = 100
@@ -61,7 +61,7 @@ def main():
     ).to(device)
 
     # define loss function
-    loss_fn = nn.MSELoss()
+    loss_fn = nn.SmoothL1Loss()
 
     # initialize learnable learning rate scheduler
     learnable_lr = LearnableLR(model, init_lr=init_inner_lr).to(device)

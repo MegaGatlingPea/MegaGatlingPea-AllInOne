@@ -11,6 +11,13 @@ class LRScheduler:
     def step(self, val_loss):
         self.scheduler.step(val_loss)
 
+class CosineAnnealingLR(nn.Module):
+    def __init__(self, optimizer, T_max=10, eta_min=0):
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
+
+    def step(self):
+        self.scheduler.step()
+
 class LearnableLR(nn.Module):
     def __init__(self, model, init_lr=0.001):
         super(LearnableLR, self).__init__()

@@ -4,7 +4,7 @@ from torch_geometric.data import Batch
 import higher
 
 class MAMLPlusPlusTrainer:
-    def __init__(self, model, meta_optimizer, learnable_lr, task_attention, loss_fn, device, num_inner_loops=1, logger=None):
+    def __init__(self, model, meta_optimizer, learnable_lr, task_attention, loss_fn, device, num_inner_loops=5, logger=None):
         """
         Initialize the MAML++ trainer.
 
@@ -26,6 +26,17 @@ class MAMLPlusPlusTrainer:
         self.device = device
         self.num_inner_loops = num_inner_loops
         self.logger = logger
+
+        # 初始化权重
+        self._init_weights()
+
+    def _init_weights(self):
+        """使用 Xavier 初始化模型权重"""
+        for m in self.model.modules():
+            if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
     def train_epoch(self, dataloader):
         """
@@ -64,7 +75,7 @@ class MAMLPlusPlusTrainer:
                 query_kd_values = torch.cat(
                     [sample[2] for sample in query_set], dim=0).to(self.device)
 
-                # Get the learning rate for the current task
+                # 获取当前任务的学习率
                 lr_dict = self.learnable_lr.get_lrs()
                 param_groups = []
                 lr_list = []
@@ -74,12 +85,12 @@ class MAMLPlusPlusTrainer:
                         param_groups.append({'params': param, 'lr': lr})
                         lr_list.append(lr)
                     else:
-                        lr = 1.0
+                        lr = 1e-4  # 降低默认学习率
                         param_groups.append({'params': param, 'lr': lr})
                         lr_list.append(lr)
 
-                # 使用自定义学习率创建内循环优化器
-                inner_optimizer = torch.optim.SGD(param_groups)
+                # 使用 Adam 作为内循环优化器
+                inner_optimizer = torch.optim.Adam(param_groups)
 
                 with higher.innerloop_ctx(
                     self.model,
@@ -95,6 +106,9 @@ class MAMLPlusPlusTrainer:
 
                         # Perform parameter update using diffopt
                         diffopt.step(support_loss)
+
+                        # 应用梯度裁剪
+                        nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
                     # Evaluate the adapted model on the query set
                     query_preds = fmodel(
@@ -121,6 +135,10 @@ class MAMLPlusPlusTrainer:
             # Outer loop: Update global model parameters and learnable learning rate parameters
             self.meta_optimizer.zero_grad()
             meta_loss.backward()
+
+            # 应用梯度裁剪
+            nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
             self.meta_optimizer.step()
 
             # Record meta loss

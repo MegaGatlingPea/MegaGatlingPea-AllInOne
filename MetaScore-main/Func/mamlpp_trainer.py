@@ -16,6 +16,7 @@ class MAMLPlusPlusTrainer:
             loss_fn (callable): The loss function.
             device (str): The device type.
             num_inner_loops (int): The number of inner loop updates.
+            logger (Logger, optional): Logger instance.
         """
         self.model = model.to(device)
         self.meta_optimizer = meta_optimizer
@@ -65,14 +66,26 @@ class MAMLPlusPlusTrainer:
 
                 # Get the learning rate for the current task
                 lr_dict = self.learnable_lr.get_lrs()
-                inner_optimizer = torch.optim.SGD(
-                    self.model.parameters(), lr=1.0)  # Custom learning rate in higher
+                param_groups = []
+                lr_list = []
+                for name, param in self.model.named_parameters():
+                    if name in lr_dict:
+                        lr = lr_dict[name].item()
+                        param_groups.append({'params': param, 'lr': lr})
+                        lr_list.append(lr)
+                    else:
+                        lr = 1.0
+                        param_groups.append({'params': param, 'lr': lr})
+                        lr_list.append(lr)
+
+                # 使用自定义学习率创建内循环优化器
+                inner_optimizer = torch.optim.SGD(param_groups)
 
                 with higher.innerloop_ctx(
                     self.model,
                     inner_optimizer,
                     copy_initial_weights=False,
-                    override={'lr': lr_dict}
+                    override={'lr': lr_list}
                 ) as (fmodel, diffopt):
                     # Inner loop: Perform several steps of gradient descent on the support set
                     for inner_step in range(self.num_inner_loops):

@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import copy
 
 from Model.MoleculeEmbedding.embedding import MoleculeEmbedding
 from Model.PocketEncoder.gat import GAT
@@ -52,9 +53,14 @@ class MetaScore(nn.Module):
         
         # Embed and encode ligand
         x_embedded, edge_attr_embedded = self.molecule_embedding(ligand_data.x, ligand_data.edge_attr)
-        ligand_data.x = x_embedded
-        ligand_data.edge_attr = edge_attr_embedded
-        ligand_repr = self.ligand_encoder(ligand_data)
+        
+        # clone ligand_data, avoid in-place modification
+        ligand_data_embedded = copy.deepcopy(ligand_data)
+        ligand_data_embedded.x = x_embedded
+        ligand_data_embedded.edge_attr = edge_attr_embedded
+        
+        # use cloned data for encoding
+        ligand_repr = self.ligand_encoder(ligand_data_embedded)
         
         # Interaction and prediction
         interaction_repr = self.interaction_module(protein_repr, ligand_repr)

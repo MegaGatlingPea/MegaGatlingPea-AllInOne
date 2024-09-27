@@ -17,8 +17,8 @@ from Func.logger import Logger
 def main():
     # set parameters
     cluster_data_dir = './cluster_data'
-    k_shot = 10
-    k_query = 15
+    k_shot = 2
+    k_query = 2
     meta_batch_size = 4       # number of tasks in a batch
     num_inner_loops = 4       # number of inner loop updates
     init_inner_lr = 0.001     # initial value of inner loop learning rate

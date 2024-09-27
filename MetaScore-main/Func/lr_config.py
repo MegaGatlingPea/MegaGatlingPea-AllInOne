@@ -23,7 +23,8 @@ class LearnableLR(nn.Module):
         """
         self.lr_params = nn.ParameterDict()
         for name, param in model.named_parameters():
-            lr = nn.Parameter(torch.full_like(param, init_lr))
+            # 确保每个参数只有一个标量学习率
+            lr = nn.Parameter(torch.tensor(init_lr))
             self.lr_params[name.replace('.', '_')] = lr
 
     def get_lrs(self):
@@ -31,6 +32,6 @@ class LearnableLR(nn.Module):
         Get the current learning rate dictionary.
 
         Returns:
-            dict: The mapping from parameter names to learning rate tensors.
+            dict: The mapping from parameter names to learning rate scalars.
         """
         return {name.replace('_', '.'): lr for name, lr in self.lr_params.items()}

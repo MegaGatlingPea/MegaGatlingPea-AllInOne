@@ -27,11 +27,11 @@ class MAMLPlusPlusTrainer:
         self.num_inner_loops = num_inner_loops
         self.logger = logger
 
-        # 初始化权重
+        # Initialize weights
         self._init_weights()
 
     def _init_weights(self):
-        """使用 Xavier 初始化模型权重"""
+        """Initialize model weights using Xavier uniform initialization"""
         for m in self.model.modules():
             if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight)
@@ -75,7 +75,7 @@ class MAMLPlusPlusTrainer:
                 query_kd_values = torch.cat(
                     [sample[2] for sample in query_set], dim=0).to(self.device)
 
-                # 获取当前任务的学习率
+                # Get the learning rate for the current task
                 lr_dict = self.learnable_lr.get_lrs()
                 param_groups = []
                 lr_list = []
@@ -85,11 +85,11 @@ class MAMLPlusPlusTrainer:
                         param_groups.append({'params': param, 'lr': lr})
                         lr_list.append(lr)
                     else:
-                        lr = 1e-4  # 降低默认学习率
+                        lr = 1e-4  # Reduce default learning rate
                         param_groups.append({'params': param, 'lr': lr})
                         lr_list.append(lr)
 
-                # 使用 Adam 作为内循环优化器
+                # Use Adam as the inner loop optimizer
                 inner_optimizer = torch.optim.Adam(param_groups)
 
                 with higher.innerloop_ctx(
@@ -107,7 +107,7 @@ class MAMLPlusPlusTrainer:
                         # Perform parameter update using diffopt
                         diffopt.step(support_loss)
 
-                        # 应用梯度裁剪
+                        # Apply gradient clipping
                         nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
                     # Evaluate the adapted model on the query set
@@ -136,7 +136,7 @@ class MAMLPlusPlusTrainer:
             self.meta_optimizer.zero_grad()
             meta_loss.backward()
 
-            # 应用梯度裁剪
+            # Apply gradient clipping
             nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
             self.meta_optimizer.step()

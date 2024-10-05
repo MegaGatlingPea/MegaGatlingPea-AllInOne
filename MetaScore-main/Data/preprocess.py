@@ -97,7 +97,7 @@ def pdbbind2lmdb(pdbbind_dir, csv_file, output_dir, mode='rewrite', map_size=1e9
 
 # Usage example
 if __name__ == "__main__":
-    pdbbind_dir = "/mnt/data/pdbbind2020-PL"
+    pdbbind_dir = "/home/megagatlingpea/Data/pdbbind2020-PL"
     csv_file = "./../pdbbind_general.csv"
     output_dir = "./../cluster_pdbbind"
 

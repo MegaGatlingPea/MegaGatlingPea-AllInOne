@@ -14,10 +14,10 @@ model_params:
   normalization: true   # Used in SimpleMLP and ResNet
 
   # SimpleMLP
-  hidden_dims: [256, 256]  # List of hidden layer sizes
+  hidden_dims: [256, 64]  # List of hidden layer sizes
 
-  # FCResNet & ResNet
-  features: 256          # Used as 'hidden_dim' in ResNet
+  # FCResNet & ResNet # 256 or 128 & 2 or 3 or 4
+  features: 128         # Used as 'hidden_dim' in ResNet
   depth: 5               # Number of layers or blocks
   
   # FCResNet

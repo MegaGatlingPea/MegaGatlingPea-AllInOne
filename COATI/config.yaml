@@ -39,6 +39,6 @@ training_params:
 inference_params:
   model_dir: 'pths/FCResNet_0.7048_23-10'  # Replace with your actual model directory
   model_name: 'best_model.pth'          # Replace with your actual best model filename
-  input_csv: "paddle_prediction/data/test.csv"
+  input_csv: "paddle_prediction/data/test_nopoint.csv"
   output_csv: "paddle_prediction/data/predict1.csv"           # List of SMILES strings to predict
   input_dim: 256                               # Optional, will be inferred if not provided

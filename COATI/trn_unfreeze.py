@@ -1,9 +1,9 @@
-# main_training_script.py
+# trn_unfreeze.py
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 import tqdm
 import pandas as pd
 import yaml
@@ -15,16 +15,20 @@ import random
 import numpy as np
 import joblib
 import shutil
+import pickle  # For loading the serialized tokenizer
 from coati.models.io.coati import load_e3gnn_smiles_clip_e2e
 from coati.generative.coati_purifications import embed_smiles_batch
 
 # Import MoleculePropertyDataset from func.py
-from func import MoleculePropertyDataset
+from func import MoleculePropertyDataset4Smiles as MoleculePropertyDataset
 
 # Import models from mlp.py
 from mlp import FCResNet, SimpleMLP, ResNet, LinearModel
 
-# Set random seed function
+with open('./tokenizer.pkl', 'rb') as f:
+    tokenizer = pickle.load(f)
+
+# Set random seed for reproducibility
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -36,17 +40,40 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+class CombinedModel(nn.Module):
+    """Combined model integrating the encoder and predictor."""
+    def __init__(self, encoder, predictor):
+        super(CombinedModel, self).__init__()
+        self.encoder = encoder
+        self.predictor = predictor
+        self.tokenizer = tokenizer
+
+    def forward(self, smiles):
+        """
+        Forward pass through the combined model.
+
+        Args:
+            smiles (list of str): List of SMILES strings.
+
+        Returns:
+            torch.Tensor: Predicted outputs.
+        """
+        encodings = embed_smiles_batch(smiles, self.encoder, self.tokenizer)  
+        outputs = self.predictor(encodings)
+        return outputs
+
 class Trainer:
+    """Trainer class for training the CombinedModel."""
     def __init__(self, config):
+        self.tokenizer = tokenizer
         self.config = config
         set_seed(config['training_params']['seed'])
         self.DEVICE = torch.device(config['device'] if torch.cuda.is_available() else "cpu")
         self.current_time = datetime.now().strftime('%Y-%m-%d-%H-%M')
         # Create temporary model save directory
         self.temp_model_save_dir = os.path.join('pths', f"temp_{config['model_params']['model_name']}_{self.current_time}")
-        if not os.path.exists(self.temp_model_save_dir):
-            os.makedirs(self.temp_model_save_dir)
-        # Set Logger
+        os.makedirs(self.temp_model_save_dir, exist_ok=True)
+        # Setup logging
         log_filename = os.path.join(self.temp_model_save_dir, 'training.log')
         logging.basicConfig(
             level=logging.INFO,
@@ -57,7 +84,7 @@ class Trainer:
             ]
         )
         self.logger = logging.getLogger(__name__)
-        # Save used config file
+        # Save used configuration
         self.save_config()
 
         # Load data
@@ -72,28 +99,45 @@ class Trainer:
         # Save scaler for later use
         joblib.dump(self.scaler, os.path.join(self.temp_model_save_dir, 'label_scaler.save'))
 
-        # Check if embeddings have been saved
-        if os.path.exists('embeddings.pt'):
-            self.logger.info("Loading embeddings from embeddings.pt")
-            self.encodings = torch.load('embeddings.pt')
-        else:
-            # Load encoder and tokenizer, use CPU to save CUDA memory
-            from coati.models.io.coati import load_e3gnn_smiles_clip_e2e
-            from coati.generative.coati_purifications import embed_smiles_batch
+        # Initialize encoder, load tokenizer from serialized file, ensure encoder is trainable
+        encoder, _ = load_e3gnn_smiles_clip_e2e(
+            freeze=False,  # Ensure encoder is not frozen
+            device=self.DEVICE,
+            doc_url="./models/grande_closed.pkl",
+        )
+        # Unfreeze all encoder parameters
+        for param in encoder.parameters():
+            param.requires_grad = True
 
-            encoder, tokenizer = load_e3gnn_smiles_clip_e2e(
-                freeze=False,
-                device=torch.device('cpu'),
-                doc_url="./models/grande_closed.pkl",
-            )
-            # Compute embeddings
-            self.logger.info("Computing embeddings...")
-            self.encodings = embed_smiles_batch(self.smiles, encoder, tokenizer)
-            # Save embeddings to file
-            torch.save(self.encodings, 'embeddings.pt')
+        # Initialize predictor based on configuration
+        predictor = self._initialize_predictor(config, encoder)
 
-        # Create dataset and data loader
-        dataset = MoleculePropertyDataset(self.encodings, self.labels)
+        # Create combined model
+        self.model = CombinedModel(encoder, predictor).to(self.DEVICE)
+
+        # Initialize optimizer with all parameters of the combined model
+        self.optimizer = optim.AdamW(
+            self.model.parameters(),
+            lr=config['training_params']['learning_rate']
+        )
+
+        self.criterion = nn.MSELoss()
+        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, 
+            mode='min', 
+            factor=0.2, 
+            patience=config['training_params']['lr_scheduler_patience'], 
+            verbose=True
+        )
+
+        # Early stopping parameters
+        self.patience = config['training_params']['early_stopping_patience']
+        self.early_stopping_delta = config['training_params']['early_stopping_delta']
+        self.best_val_loss = float('inf')
+        self.trigger_times = 0
+
+        # Prepare dataset and dataloaders
+        dataset = MoleculePropertyDataset(self.smiles, self.labels)
         train_size = int((1 - config['training_params']['validation_split']) * len(dataset))
         val_size = len(dataset) - train_size
         self.train_dataset, self.val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
@@ -113,14 +157,24 @@ class Trainer:
             pin_memory=True
         )
 
-        # Initialize model, loss function and optimizer
-        input_dim = self.encodings.shape[1]
+        self.model_save_dir = None
 
-        # Choose model based on config
+    def _initialize_predictor(self, config, encoder):
+        """
+        Initialize the predictor model based on configuration.
+
+        Args:
+            config (dict): Configuration dictionary.
+            encoder (nn.Module): Encoder model.
+
+        Returns:
+            nn.Module: Initialized predictor model.
+        """
+        input_dim = 256  # Fixed embedding dimension
         model_name = config['model_params']['model_name']
 
         if model_name == 'FCResNet':
-            self.model = FCResNet(
+            predictor = FCResNet(
                 input_dim=input_dim,
                 features=config['model_params']['features'],
                 depth=config['model_params']['depth'],
@@ -130,18 +184,18 @@ class Trainer:
                 dropout_rate=config['model_params']['dropout_rate'],
                 num_outputs=config['model_params']['num_outputs'],
                 activation=config['model_params']['activation']
-            ).to(self.DEVICE)
+            )
         elif model_name == 'SimpleMLP':
-            self.model = SimpleMLP(
+            predictor = SimpleMLP(
                 input_dim=input_dim,
                 hidden_dims=config['model_params'].get('hidden_dims', [256, 256]),
                 num_outputs=config['model_params']['num_outputs'],
                 activation=config['model_params']['activation'],
                 dropout_rate=config['model_params']['dropout_rate'],
                 normalization=config['model_params'].get('normalization', False)
-            ).to(self.DEVICE)
+            )
         elif model_name == 'ResNet':
-            self.model = ResNet(
+            predictor = ResNet(
                 input_dim=input_dim,
                 hidden_dim=config['model_params']['features'],
                 num_blocks=config['model_params']['depth'],
@@ -149,54 +203,37 @@ class Trainer:
                 activation=config['model_params']['activation'],
                 dropout_rate=config['model_params']['dropout_rate'],
                 normalization=config['model_params'].get('normalization', False)
-            ).to(self.DEVICE)
+            )
         elif model_name == 'LinearModel':
-            self.model = LinearModel(
+            predictor = LinearModel(
                 input_dim=input_dim,
                 num_outputs=config['model_params']['num_outputs']
-            ).to(self.DEVICE)
+            )
         else:
             raise ValueError(f"Unknown model name {model_name}")
 
-        self.criterion = nn.MSELoss()
-        self.optimizer = optim.AdamW(self.model.parameters(), lr=config['training_params']['learning_rate'])
-
-        # Learning rate scheduler
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, 
-            mode='min', 
-            factor=0.2, 
-            patience=20, 
-            verbose=True
-        )
-
-        # Training loop parameters
-        self.num_epochs = config['training_params']['num_epochs']
-        self.best_val_loss = float('inf')
-        self.patience = config['training_params']['patience']
-        self.trigger_times = 0
-        self.grad_clip = config['training_params']['grad_clip']
-        self.early_stopping_delta = config['training_params']['early_stopping_delta']
+        return predictor
 
     def train(self):
-        for epoch in range(self.num_epochs):
+        """Training loop for the CombinedModel."""
+        for epoch in range(self.config['training_params']['num_epochs']):
             self.model.train()
             train_loss = 0.0
-            for batch in tqdm.tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.num_epochs} - Training"):
-                inputs = batch['encoding'].to(self.DEVICE)
-                targets = batch['property'].to(self.DEVICE).unsqueeze(1)  # Ensure targets shape is correct
+            for batch in tqdm.tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{self.config['training_params']['num_epochs']} - Training"):
+                smiles_batch = batch['smiles']
+                targets = batch['property'].to(self.DEVICE).unsqueeze(1)  # Ensure correct target shape
 
                 self.optimizer.zero_grad()
-                outputs = self.model(inputs)
+                outputs = self.model(smiles_batch)  
                 loss = self.criterion(outputs, targets)
                 loss.backward()
 
                 # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.grad_clip)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.config['training_params']['grad_clip'])
 
                 self.optimizer.step()
 
-                train_loss += loss.item() * inputs.size(0)
+                train_loss += loss.item() * targets.size(0)
             
             train_loss /= len(self.train_loader.dataset)
 
@@ -204,12 +241,12 @@ class Trainer:
             self.model.eval()
             val_loss = 0.0
             with torch.no_grad():
-                for batch in tqdm.tqdm(self.val_loader, desc=f"Epoch {epoch+1}/{self.num_epochs} - Validation"):
-                    inputs = batch['encoding'].to(self.DEVICE)
-                    targets = batch['property'].to(self.DEVICE).unsqueeze(1)  # Ensure targets shape is correct
-                    outputs = self.model(inputs)
+                for batch in tqdm.tqdm(self.val_loader, desc=f"Epoch {epoch+1}/{self.config['training_params']['num_epochs']} - Validation"):
+                    smiles_batch = batch['smiles']
+                    targets = batch['property'].to(self.DEVICE).unsqueeze(1)
+                    outputs = self.model(smiles_batch)
                     loss = self.criterion(outputs, targets)
-                    val_loss += loss.item() * inputs.size(0)
+                    val_loss += loss.item() * targets.size(0)
             
             val_loss /= len(self.val_loader.dataset)
 
@@ -220,11 +257,14 @@ class Trainer:
 
             self.logger.info(f"Epoch {epoch+1}: LR = {lr:.6f}, Train Loss = {train_loss:.4f}, Val Loss = {val_loss:.4f}")
 
-            # Check for early stopping and save best model
+            # Check for early stopping and save the best model
             if val_loss < self.best_val_loss - self.early_stopping_delta:
                 self.best_val_loss = val_loss
                 best_model_path = os.path.join(self.temp_model_save_dir, 'best_model.pth')
-                torch.save(self.model.state_dict(), best_model_path)
+                torch.save({
+                    'model': self.model,  
+                    'scaler': self.scaler
+                }, best_model_path)
                 self.trigger_times = 0
                 self.logger.info(f"Best model saved with val_loss {self.best_val_loss:.4f}")
             else:
@@ -233,180 +273,113 @@ class Trainer:
                     self.logger.info("Early stopping triggered.")
                     break
 
-        # After training, rename model save directory
+        # Rename the model save directory after training
         time_str = datetime.now().strftime('%H-%M')
         new_folder_name = f"{self.config['model_params']['model_name']}_{self.best_val_loss:.4f}_{time_str}"
         new_model_save_dir = os.path.join('pths', new_folder_name)
         os.rename(self.temp_model_save_dir, new_model_save_dir)
         self.logger.info(f"Model directory renamed to {new_model_save_dir}")
-        # Update self.model_save_dir to new path
         self.model_save_dir = new_model_save_dir
 
     def save_config(self):
-        # Save config file used for this training
+        """Save the configuration file used for training."""
         config_save_path = os.path.join(self.temp_model_save_dir, 'config.yaml')
-        import shutil
-        source_config_path = './config.yaml'  # Assuming original config file is in project root
+        source_config_path = './config.yaml'  # Assume original config file is at project root
         shutil.copy(source_config_path, config_save_path)
         self.logger.info(f"Config File has been saved to {config_save_path}")
 
 class Inferencer:
+    """Inferencer class for making predictions using the CombinedModel."""
     def __init__(self, config):
         self.config = config
         self.DEVICE = torch.device(config['device'] if torch.cuda.is_available() else "cpu")
         self.model_dir = config['inference_params']['model_dir']
-        # Load scaler
-        scaler_path = os.path.join(self.model_dir, 'label_scaler.save')
-        self.scaler = joblib.load(scaler_path)
-        # Load model
+        
+        # load model and scaler
         model_path = os.path.join(self.model_dir, 'best_model.pth')
-        # Get model parameters
-        model_params_path = os.path.join(self.model_dir, 'config.yaml')
-        with open(model_params_path, 'r') as f:
-            model_config = yaml.safe_load(f)
-        model_params = model_config['model_params']
-        input_dim = config['inference_params'].get('input_dim')
-
-        # Load encoder and tokenizer
-        from coati.models.io.coati import load_e3gnn_smiles_clip_e2e
-        from coati.generative.coati_purifications import embed_smiles_batch
-
-        self.encoder, self.tokenizer = load_e3gnn_smiles_clip_e2e(
-            freeze=True,
-            device=torch.device('cpu'),
-            doc_url="./models/grande_closed.pkl",
-        )
-
-        # If input_dim is not provided, compute an example embedding to get input_dim
-        if input_dim is None:
-            dummy_smiles = ['CC']  # Any valid SMILES string
-            dummy_encodings = embed_smiles_batch(dummy_smiles, self.encoder, self.tokenizer)
-            input_dim = dummy_encodings.shape[1]
-
-        model_name = model_params['model_name']
-        if model_name == 'FCResNet':
-            self.model = FCResNet(
-                input_dim=input_dim,
-                num_outputs=model_params['num_outputs'],
-                features=model_params['features'],
-                depth=model_params['depth'],
-                spectral_normalization=model_params.get('spectral_normalization', False),
-                coeff=model_params.get('coeff', 0.95),
-                n_power_iterations=model_params.get('n_power_iterations', 1)
-            ).to(self.DEVICE)
-        elif model_name == 'SimpleMLP':
-            self.model = SimpleMLP(
-                input_dim=input_dim,
-                hidden_dims=model_params['hidden_dims'],
-                num_outputs=model_params['num_outputs'],
-                activation=model_params['activation'],
-                dropout_rate=model_params['dropout_rate'],
-                normalization=model_params.get('normalization', False)
-            ).to(self.DEVICE)
-        elif model_name == 'ResNet':
-            self.model = ResNet(
-                input_dim=input_dim,
-                num_outputs=model_params['num_outputs'],
-                features=model_params['features'],
-                depth=model_params['depth'],
-                normalization=model_params.get('normalization', False)
-            ).to(self.DEVICE)
-        elif model_name == 'LinearModel':
-            self.model = LinearModel(
-                input_dim=input_dim,
-                num_outputs=model_params['num_outputs']
-            ).to(self.DEVICE)
-        else:
-            raise ValueError(f"Unknown model name {model_name}")
-        # Load model weights
-        self.model.load_state_dict(torch.load(model_path, map_location=self.DEVICE))
+        checkpoint = torch.load(model_path, map_location=self.DEVICE)
+        self.model = checkpoint['model'].to(self.DEVICE)
         self.model.eval()
-
+        
+        self.scaler = checkpoint['scaler']
+        
+        # Initialize tokenizer
+        self.tokenizer = tokenizer  
+        
         # Initialize logger
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
-        # Create console handler
+        
         ch = logging.StreamHandler()
-        ch.setLevel(logging.INFO)
-        # Create formatter and add to handler
+        ch.setLevel(logging.INFO)  
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         ch.setFormatter(formatter)
-        # Add handler to logger
         if not self.logger.handlers:
             self.logger.addHandler(ch)
 
     def predict(self, smiles_list):
-        # Compute embeddings
-        encodings = embed_smiles_batch(smiles_list, self.encoder, self.tokenizer)
-        inputs = torch.tensor(encodings, dtype=torch.float32).to(self.DEVICE)
-        with torch.no_grad():
-            outputs = self.model(inputs)
-        outputs = outputs.cpu().numpy()
-        # Inverse normalize outputs
+        """
+        Make predictions on a list of SMILES strings.
+
+        Args:
+            smiles_list (list of str): List of SMILES strings.
+
+        Returns:
+            numpy.ndarray: Predicted property values.
+        """
+        self.model.to(self.DEVICE)
+        outputs = self.model(smiles_list)
+        outputs = outputs.cpu().detach().numpy()
         outputs_original = self.scaler.inverse_transform(outputs)
+        self.model.to('cpu')
+        torch.cuda.empty_cache()
         return outputs_original.flatten()
-    
+        
     def predict_from_csv(self, csv_path):
-        import pandas as pd
+        """
+        Make predictions from a CSV file containing SMILES strings.
+
+        Args:
+            csv_path (str): Path to the input CSV file.
+
+        Returns:
+            pd.DataFrame: DataFrame containing SMILES and their predicted properties.
+        """
         try:
             df = pd.read_csv(csv_path)
             if 'smiles' not in df.columns:
-                raise ValueError("csv file must contain 'smiles' column.")
+                raise ValueError("CSV must contain 'smiles' column.")
             smiles_list = df['smiles'].tolist()
-            
-            # Check and generate embeddings if necessary
-            embedding_path = os.path.join(os.path.dirname(csv_path), 'test_embedding.pt')
-            if os.path.exists(embedding_path):
-                self.logger.info(f"Loading embeddings from {embedding_path}")
-                encodings = torch.load(embedding_path)
-            else:
-                self.logger.info("Generating embeddings...")
-                encodings = []
-                for smile in tqdm.tqdm(smiles_list, desc="Embedding SMILES"):
-                    encoding = embed_smiles_batch([smile], self.encoder, self.tokenizer)
-                    encodings.append(encoding)
-                encodings = np.vstack(encodings)
-                torch.save(encodings, embedding_path)
-                self.logger.info(f"Embeddings saved to {embedding_path}")
-            
-            # Perform prediction with progress bar
-            self.logger.info("Starting inference...")
+
+            self.logger.info("Begin Inference...")
             predictions = []
-            for i in tqdm.tqdm(range(0, len(smiles_list), 64), desc="Predicting"):
+            for i in tqdm.tqdm(range(0, len(smiles_list), 64), desc="Predicting..."):
                 batch_smiles = smiles_list[i:i+64]
-                batch_encodings = encodings[i:i+64]
-                inputs = torch.tensor(batch_encodings, dtype=torch.float32).to(self.DEVICE)
-                with torch.no_grad():
-                    outputs = self.model(inputs)
-                outputs = outputs.cpu().numpy()
-                outputs_original = self.scaler.inverse_transform(outputs)
-                predictions.extend(outputs_original.flatten())
+                batch_predictions = self.predict(batch_smiles)
+                predictions.extend(batch_predictions)
             
             df_ori = pd.read_csv('./paddle_prediction/data/test.csv')
             smiles_list_ori = df_ori['smiles'].tolist()
             
-            # Prepare results DataFrame
             results_df = pd.DataFrame({
                 'smiles': smiles_list_ori,
                 'pred': predictions
             })
             
-            # Determine output CSV path
-            model_dir_last = self.model_dir.rstrip('/').split('/')[-1]
+            model_dir_last = os.path.basename(self.model_dir.rstrip('/'))
             output_csv = os.path.join(os.path.dirname(csv_path), f"{model_dir_last}.csv")
             
-            # Save results
             results_df.to_csv(output_csv, index=False)
-            self.logger.info(f"Inference results saved to {output_csv}")
-            print(f"Inference results saved to {output_csv}")
+            self.logger.info(f"Inference result saves to {output_csv}")
+            print(f"Inference result saves to {output_csv}")
             
             return results_df
         except Exception as e:
-            self.logger.error(f"Error handling csv file : {e}")
+            self.logger.error(f"Error handling csv file: {e}")
             raise
 
 if __name__ == "__main__":
-    # Load config
+    # Load configuration
     with open('config.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
@@ -427,4 +400,4 @@ if __name__ == "__main__":
             for smile, pred in zip(smiles_list, predictions):
                 print(f"SMILES: {smile}, Predicted Property: {pred}")
     else:
-        raise ValueError("Mode must br 'train' or 'infer'")
+        raise ValueError("Mode must be 'train' or 'infer'")

@@ -1,0 +1,43 @@
+mode: 'train'  # Options: 'train' or 'infer'
+
+device: cuda:0
+train_csv: './paddle_prediction/data/train.csv'
+
+# Model parameters
+model_params:
+  model_name: 'ResNet'  # Options: 'FCResNet', 'SimpleMLP', 'ResNet', 'LinearModel'
+  
+  # Global
+  num_outputs: 1
+  activation: 'relu'    # Options: 'relu', 'leakyrelu', 'tanh', etc.
+  dropout_rate: 0.05
+  normalization: true   # Used in SimpleMLP and ResNet
+
+  # SimpleMLP
+  hidden_dims: [256, 64]  # List of hidden layer sizes
+
+  # FCResNet & ResNet
+  features: 64          # Used as 'hidden_dim' in ResNet
+  depth: 1               # Number of layers or blocks
+  
+  # FCResNet
+  spectral_normalization: true
+  coeff: 0.95
+  n_power_iterations: 1
+
+training_params:
+  batch_size: 64
+  num_workers: 4
+  num_epochs: 200
+  learning_rate: 0.0001
+  patience: 40
+  grad_clip: 1.0
+  validation_split: 0.15
+  early_stopping_delta: 0.0001
+  seed: 2024
+
+inference_params:
+  model_dir: 'pths/SimpleMLP2023-10-08-12-00'  # Replace with your actual model directory
+  model_name: 'best_model_0.1234.pth'          # Replace with your actual best model filename
+  smiles_list: ['CCO', 'CCN', 'CCC']           # List of SMILES strings to predict
+  input_dim: 256                               # Optional, will be inferred if not provided

@@ -1,16 +1,16 @@
-mode: 'infer'  # Options: 'train' or 'infer'
+mode: 'train'  # Options: 'train' or 'infer'
 
 device: cuda:0
 train_csv: './paddle_prediction/data/train.csv'
 
 # Model parameters
 model_params:
-  model_name: 'LinearModel'  # Options: 'FCResNet', 'SimpleMLP', 'ResNet', 'LinearModel'
+  model_name: 'FCResNet'  # Options: 'FCResNet', 'SimpleMLP', 'ResNet', 'LinearModel'
   
   # Global
   num_outputs: 1
   activation: 'relu'    # Options: 'relu', 'leakyrelu', 'tanh', etc.
-  dropout_rate: 0.2
+  dropout_rate: 0.05
   normalization: true   # Used in SimpleMLP and ResNet
 
   # SimpleMLP
@@ -38,7 +38,7 @@ training_params:
   seed: 42
 
 inference_params:
-  model_dir: 'pths/LinearModel_0.6802_21-34'  # Replace with your actual model directory
+  model_dir: 'pths/FCResNet_0.7048_23-10'  # Replace with your actual model directory
   model_name: 'best_model.pth'          # Replace with your actual best model filename
   input_csv: "paddle_prediction/data/test_nopoint.csv"
   output_csv: "paddle_prediction/data/predict1.csv"  # Path to save prediction results

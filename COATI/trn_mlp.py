@@ -338,6 +338,23 @@ class Inferencer:
         # Inverse normalize outputs
         outputs_original = self.scaler.inverse_transform(outputs)
         return outputs_original.flatten()
+    
+    def predict_from_csv(self, csv_path):
+        import pandas as pd
+        try:
+            df = pd.read_csv(csv_path)
+            if 'smiles' not in df.columns:
+                raise ValueError("csv file must contain 'smiles' column.")
+            smiles_list = df['smiles'].tolist()
+            predictions = self.predict(smiles_list)
+            results_df = pd.DataFrame({
+                'smiles': smiles_list,
+                'predicted_property': predictions
+            })
+            return results_df
+        except Exception as e:
+            self.logger.error(f"Error handling csv file : {e}")
+            raise
 
 if __name__ == "__main__":
     # Load config
@@ -351,9 +368,17 @@ if __name__ == "__main__":
         trainer.train()
     elif mode == 'infer':
         inferencer = Inferencer(config)
-        smiles_list = config['inference_params']['smiles_list']
-        predictions = inferencer.predict(smiles_list)
-        for smile, pred in zip(smiles_list, predictions):
-            print(f"SMILES: {smile}, Predicted Property: {pred}")
+        inference_params = config['inference_params']
+        if 'input_csv' in inference_params:
+            csv_path = inference_params['input_csv']
+            results = inferencer.predict_from_csv(csv_path)
+            output_csv = inference_params.get('output_csv', 'predictions.csv')
+            results.to_csv(output_csv, index=False)
+            print(f"Inference results {output_csv}")
+        else:
+            smiles_list = inference_params['smiles_list']
+            predictions = inferencer.predict(smiles_list)
+            for smile, pred in zip(smiles_list, predictions):
+                print(f"SMILES: {smile}, Predicted Property: {pred}")
     else:
-        raise ValueError("Mode must be 'train' or 'infer'")
+        raise ValueError("Mode must br 'train' or 'infer'")

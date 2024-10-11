@@ -171,3 +171,4 @@ logs/
 *.zip
 *.lmdb/
 *.lmdb
+paddle/data/conformer/

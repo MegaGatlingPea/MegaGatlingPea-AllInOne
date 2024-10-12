@@ -1,0 +1,59 @@
+dataset_path: /home/megagatlingpea/workdir/MegaGatlingPea-AllInOne/paddle/data/processed/data.pkl
+device: cuda:0
+inference_params:
+  input_pkl: /home/megagatlingpea/workdir/MegaGatlingPea-AllInOne/paddle/data/processed/test.pkl
+  model_dir: pths/LinearModel_2024-10-12-11-04
+mode: train
+model_params:
+  atom_embedding_dim: 512
+  bond_embedding_dim: 64
+  dropout: 0.2
+  mlp_params:
+    FCResNet:
+      activation: relu
+      coeff: 0.95
+      depth: 2
+      dropout_rate: 0.05
+      features: 256
+      input_dim: 256
+      n_power_iterations: 1
+      num_outputs: 1
+      spectral_normalization: true
+    LinearModel:
+      input_dim: 256
+      num_outputs: 1
+    ResNet:
+      activation: relu
+      dropout_rate: 0.0
+      hidden_dim: 256
+      input_dim: 128
+      normalization: false
+      num_blocks: 5
+      num_outputs: 1
+    SimpleMLP:
+      activation: relu
+      depth: 1
+      dropout_rate: 0.2
+      hidden_dims:
+      - 256
+      - 64
+      input_dim: 256
+      normalization: true
+      num_outputs: 1
+  mlp_type: LinearModel
+  mpnn_hidden_dim: 256
+  mpnn_num_layers: 5
+  mpnn_output_dim: 256
+  num_atom_features: 9
+  num_bond_features: 3
+training_params:
+  batch_size: 64
+  early_stopping_delta: 0.0001
+  grad_clip: 1.0
+  learning_rate: 0.0001
+  num_epochs: 200
+  num_workers: 4
+  patience: 30
+  seed: 42
+  use_scaler: false
+  validation_split: 0.15

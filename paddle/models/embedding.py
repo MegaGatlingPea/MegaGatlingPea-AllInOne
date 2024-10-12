@@ -3,7 +3,7 @@ import torch.nn as nn
 
 class MoleculeEmbedding(nn.Module):
     def __init__(self, num_atom_features=9, num_bond_features=3, 
-                 atom_embedding_dim=256, bond_embedding_dim=64, offset=128):
+                 atom_embedding_dim=256, bond_embedding_dim=32, offset=128):
         super(MoleculeEmbedding, self).__init__()
         
         # use linear embedding to replace embedding layer

@@ -1,0 +1,73 @@
+# config.yaml
+
+mode: 'infer'  # 选项: 'train' 或 'infer'
+
+device: 'cuda:0'
+
+dataset_path: '/home/megagatlingpea/workdir/MegaGatlingPea-AllInOne/paddle/data/processed/data.pkl'
+# scaler_path 不需要在配置文件中指定，因为每次训练会单独生成
+
+# 模型参数
+model_params:
+  mlp_type: 'LinearModel'  # 选项: 'FCResNet', 'SimpleMLP', 'ResNet', 'LinearModel'
+  num_atom_features: 9
+  num_bond_features: 3
+  atom_embedding_dim: 512
+  bond_embedding_dim: 64
+  mpnn_hidden_dim: 256
+  mpnn_output_dim: 256
+  mpnn_num_layers: 5
+  dropout: 0.2
+  
+  # 按照 mlp_type 分类的 MLP 参数
+  mlp_params:
+    FCResNet:
+      input_dim: 256  # mpnn_output_dim
+      features: 256
+      depth: 2
+      spectral_normalization: true
+      coeff: 0.95
+      n_power_iterations: 1
+      dropout_rate: 0.05
+      num_outputs: 1
+      activation: 'relu'
+      
+    SimpleMLP:
+      input_dim: 256
+      hidden_dims: [256, 64]
+      num_outputs: 1
+      activation: 'relu'
+      dropout_rate: 0.2
+      normalization: true
+      depth: 1
+      
+    ResNet:
+      input_dim: 128
+      hidden_dim: 256
+      num_blocks: 5
+      num_outputs: 1
+      activation: 'relu'
+      dropout_rate: 0.0
+      normalization: false
+      
+    LinearModel:
+      input_dim: 256
+      num_outputs: 1
+
+# 训练参数
+training_params:
+  seed: 42
+  validation_split: 0.15
+  batch_size: 64
+  num_workers: 4
+  learning_rate: 0.0001
+  num_epochs: 200
+  patience: 30
+  grad_clip: 1.0
+  early_stopping_delta: 0.0001
+  use_scaler: false
+
+# 推理参数（当 mode 为 'infer' 时使用）
+inference_params:
+  model_dir: 'pths/LinearModel_2024-10-12-11-04'  # 确保路径指向训练时保存的最佳模型
+  input_pkl: '/home/megagatlingpea/workdir/MegaGatlingPea-AllInOne/paddle/data/processed/test_final.pkl'

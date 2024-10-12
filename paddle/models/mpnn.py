@@ -5,7 +5,7 @@ from torch_geometric.nn import MessagePassing, global_mean_pool
 from torch_geometric.utils import add_self_loops
 
 class MPNNLayer(MessagePassing):
-    def __init__(self, hidden_dim, edge_dim, activation=nn.ReLU(), dropout=0.0):
+    def __init__(self, hidden_dim, edge_dim, activation=nn.ReLU(), dropout=0.2):
         super(MPNNLayer, self).__init__(aggr='add')
         self.node_mlp = nn.Linear(hidden_dim, hidden_dim)
         self.message_mlp = nn.Sequential(
@@ -33,9 +33,9 @@ class MPNNLayer(MessagePassing):
         return self.dropout(self.activation(self.node_mlp(x) + aggr_out))
 
 class MPNN(nn.Module):
-    def __init__(self, input_dim=256, edge_dim=64, hidden_dim=128, 
+    def __init__(self, input_dim=256, edge_dim=32, hidden_dim=128, 
                  output_dim=128, num_layers=3, 
-                 activation=nn.ReLU(), dropout=0.1):
+                 activation=nn.ReLU(), dropout=0.2):
         super(MPNN, self).__init__()
         self.input_dim = input_dim
         self.edge_dim = edge_dim
